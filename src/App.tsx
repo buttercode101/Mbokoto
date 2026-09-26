@@ -20,7 +20,7 @@ export default function App(){
    <nav>{profile.setupComplete&&surfaces.map(s=><button key={s.id} className={page===s.id?"active":""} onClick={()=>setPage(s.id)}>{s.title}</button>)}</nav>
   </header>
   {page==="home"&&!profile.setupComplete&&<Landing onDemo={()=>{loadDemo();setPage("home")}} onSetup={()=>setPage("setup")}/>}
-  {page==="home"&&profile.setupComplete&&<Hub page={page} setPage={setPage}/>}
+  {page==="home"&&profile.setupComplete&&<Hub setPage={setPage}/>}
   {page==="sentinel"&&<Sentinel/>}
   {page==="trace"&&<Trace/>}
   {page==="blackbox"&&<Blackbox/>}
