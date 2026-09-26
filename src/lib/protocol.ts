@@ -72,3 +72,36 @@ export const RESOURCES = [
   {name:"SADAG",number:"0800 567 567",detail:"Mental health, 24-hour"},
   {name:"Childline",number:"116",detail:"Children and adolescents"}
 ] as const;
+
+export function buildDemo(now=Date.now()) {
+  const ago=(m:number)=>now-m*60_000;
+  const contacts:TrustedContact[]=[
+    {id:"c-naledi",name:"Naledi Khumalo",relationship:"Sister",keyFingerprint:fingerprint("naledi-khumalo-independent-key"),authorised:true},
+    {id:"c-sipho",name:"Sipho Dlamini",relationship:"Friend",keyFingerprint:fingerprint("sipho-dlamini-independent-key"),authorised:true}
+  ];
+  const nodes=demoNodes(now);
+  const lastKnown:LastKnownEvent[]=[
+    {id:"lk-1",at:ago(268),kind:"check-in",title:"Left home",detail:"Explicit check-in. Pre-authorised trail only.",source:"user",verified:true},
+    {id:"lk-2",at:ago(214),kind:"place",title:"Eastgate, P2 parking",detail:"Authorised node ping. Not continuous GPS.",source:"node",verified:true},
+    {id:"lk-3",at:ago(196),kind:"transit",title:"Eastgate taxi rank",detail:"Last phone activity. Cellular degraded.",source:"device",verified:true},
+    {id:"lk-4",at:ago(124),kind:"missed",title:"Expected home",detail:"Check-in window closed. Case eligible immediately.",source:"device",verified:true}
+  ];
+  const caseId="case-lerato";
+  const evidence:EvidenceItem={id:"ev-hold-pending",caseId,kind:"original",media:"note",title:"Case opened — no footage transferred",body:"Preservation has not been requested. Originals remain at participating nodes until a hold is placed.",capturedAt:ago(118),hash:shortHash("case-opened-lerato"),sourceOfTruth:true};
+  const traceCase:TraceCase={id:caseId,ref:"SEN-2026-014",subject:"Lerato Maseko",relation:"trusted",openedAt:ago(118),openedBy:"Naledi Khumalo",status:"open",headline:"Lerato has not arrived",lastKnown,nodeIds:nodes.map(n=>n.id),eventIds:[],evidenceIds:[evidence.id],retentionHours:RETENTION_HOURS};
+  const buffer:BufferEntry[]=[
+    {id:"buf-1",at:ago(268),kind:"location",title:"Check-in · Bedford Gardens",body:"Coarse place name only. Not a live track.",hash:shortHash("checkin-bedford"),expiresAt:ago(268)+BUFFER_HOURS*3600_000,sourceOfTruth:true},
+    {id:"buf-2",at:ago(220),kind:"audio-buffer",title:"Ambient buffer · 47s",body:"Local rolling audio. Not uploaded.",hash:shortHash("audio-47s"),expiresAt:ago(220)+BUFFER_HOURS*3600_000,sourceOfTruth:true}
+  ];
+  const custody:CustodyEntry[]=[
+    {id:uid("cus"),at:ago(400),action:"Protocol armed",actor:"user",detail:"Lerato armed Sentinel. Silent tracking remains off."},
+    {id:uid("cus"),at:ago(268),action:"Check-in recorded",actor:"user",detail:"Local buffer with pre-authorised trail sharing."},
+    {id:uid("cus"),at:ago(118),action:"Case opened",actor:"trusted-contact",detail:"Case opened with independent contact key."}
+  ];
+  const log:ProtocolLog[]=[
+    {id:uid("log"),at:ago(118),surface:"trace",text:"Case SEN-2026-014 opened — Lerato has not arrived."},
+    {id:uid("log"),at:ago(124),surface:"protocol",text:"Check-in window closed. Early reporting path is open."}
+  ];
+  const profile:Profile={displayName:"Lerato Maseko",pinHash:hashPin(PIN_DEMO),decoyPinHash:hashPin(PIN_DECOY_DEMO),setupComplete:true,armed:true,consent:{timelineShare:true,nodeParticipation:true,acceptedAt:ago(800)},demo:true};
+  return {profile,contacts,nodes,cases:[traceCase] as TraceCase[],evidence:[evidence] as EvidenceItem[],events:[] as SafetyEvent[],buffer,custody,log};
+}
