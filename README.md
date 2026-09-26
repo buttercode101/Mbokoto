@@ -38,3 +38,6 @@ npm run lint
 ```
 
 See `RELEASE-VERIFICATION.md` for the verified release audit.
+
+
+CI is configured to run the independent Vite build and TypeScript check on every main push and pull request.
