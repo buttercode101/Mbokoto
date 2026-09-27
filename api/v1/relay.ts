@@ -18,6 +18,11 @@ type SignedRelayMessage = {
 const encoder = new TextEncoder();
 const MAX_BODY = 64 * 1024;
 const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+const NONCE_TTL_MS = 10 * 60_000;
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 30;
+const seenNonces = new Map<string, number>();
+const rateBuckets = new Map<string, { startedAt: number; count: number }>();
 
 function base64ToBytes(value: string): Uint8Array {
   const binary = atob(value);
@@ -67,7 +72,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const expectedToken = process.env.MBOKOTO_RELAY_TOKEN;
-  if (!expectedToken) return json(503, { ok: false, code: "relay_not_configured" });
+  if (!expectedToken || expectedToken.length < 32) return json(503, { ok: false, code: "relay_not_configured" });
 
   const auth = request.headers.get("authorization") ?? "";
   if (auth !== `Bearer ${expectedToken}`) return json(401, { ok: false, code: "unauthorised" });
@@ -96,7 +101,7 @@ export async function POST(request: Request) {
     return json(413, { ok: false, code: "message_too_large" });
   }
 
-  if (Math.abs(Date.now() - message.createdAt) > MAX_CLOCK_SKEW_MS) {
+  if (Math.abs(now - message.createdAt) > MAX_CLOCK_SKEW_MS) {
     return json(408, { ok: false, code: "stale_message" });
   }
 
