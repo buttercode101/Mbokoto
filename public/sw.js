@@ -1,4 +1,4 @@
-/* eslint-env serviceworker */
+/* global self, caches, URL, fetch */
 const CACHE_NAME = "mbokoto-shell-v1";
 const APP_SHELL = ["/", "/index.html"];
 
