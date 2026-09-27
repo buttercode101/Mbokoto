@@ -103,5 +103,5 @@ export function buildDemo(now=Date.now()) {
     {id:uid("log"),at:ago(124),surface:"protocol",text:"Check-in window closed. Early reporting path is open."}
   ];
   const profile:Profile={displayName:"Lerato Maseko",setupComplete:true,armed:true,consent:{timelineShare:true,nodeParticipation:true,acceptedAt:ago(800)},demo:true};
-  return {profile,contacts,nodes,cases:[traceCase] as TraceCase[],evidence:[evidence] as EvidenceItem[],events:[] as SafetyEvent[],buffer,custody,log,network:{cellular:"up",ble:true,mesh:false},outbox:[]};
+  return {profile,contacts,nodes,cases:[traceCase] as TraceCase[],evidence:[evidence] as EvidenceItem[],events:[] as SafetyEvent[],buffer,custody,log,network:{cellular:"up" as const,ble:true,mesh:false},outbox:[]};
 }
