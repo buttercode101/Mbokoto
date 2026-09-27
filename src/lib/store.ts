@@ -1,3 +1,4 @@
+import { putEvidenceBlob, wipeEvidenceBlobs } from "@/lib/evidence";
 import { create } from "zustand";
 import { createSentinelEnvelope, advanceDelivery } from "@/lib/engine";
 import { putEvidenceBlob } from "@/lib/evidence";
@@ -198,6 +199,7 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
   emergencyWipe: () => {
     sessionKey = null;
     wipeVault();
+    void wipeEvidenceBlobs();
     set({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
   },
   resetAll: () => {
