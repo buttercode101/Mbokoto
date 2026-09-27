@@ -32,6 +32,8 @@ interface ProtocolState extends VaultPayload {
 const initialNetwork: NetworkState = { cellular: "down", ble: true, mesh: true };
 const emptyPayload = (): VaultPayload => ({ profile: emptyProfile(), contacts: [], nodes: [], cases: [], evidence: [], events: [], buffer: [], custody: [], log: [], network: initialNetwork });
 let sessionKey: Uint8Array | null = null;
+let failedUnlocks = 0;
+let unlockBlockedUntil = 0;
 
 const logLine = (surface: ProtocolLog["surface"], text: string): ProtocolLog => ({ id: uid("log"), at: Date.now(), surface, text });
 const custodyLine = (action: string, actor: CustodyEntry["actor"], detail: string): CustodyEntry => ({ id: uid("cus"), at: Date.now(), action, actor, detail });
@@ -79,20 +81,29 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
     set({ ...emptyPayload(), session: "locked", pinError: null, storageError: null });
   },
   unlock: (pin) => {
+    const now = Date.now();
+    if (now < unlockBlockedUntil) { set({ pinError: `Try again in ${Math.ceil((unlockBlockedUntil - now) / 1000)}s.` }); return "bad"; }
     const record = readVault();
     if (!record) { set({ pinError: "No local vault is available." }); return "bad"; }
     const result = unlockVault(record, pin);
     if (result.mode === "unlocked" && result.payload && result.key) {
       sessionKey = result.key;
+      failedUnlocks = 0;
+      unlockBlockedUntil = 0;
       set({ ...result.payload, session: "unlocked", pinError: null, storageError: null });
       return "ok";
     }
     if (result.mode === "decoy") {
       sessionKey = null;
+      failedUnlocks = 0;
+      unlockBlockedUntil = 0;
       set({ ...emptyPayload(), session: "decoy", pinError: null, storageError: null });
       return "decoy";
     }
-    set({ pinError: "That PIN does not match." });
+    failedUnlocks += 1;
+    if (failedUnlocks >= 5) unlockBlockedUntil = now + 30_000;
+    else if (failedUnlocks >= 3) unlockBlockedUntil = now + 10_000;
+    set({ pinError: unlockBlockedUntil > now ? `That PIN does not match. Try again in ${Math.ceil((unlockBlockedUntil - now) / 1000)}s.` : "That PIN does not match." });
     return "bad";
   },
   exitDecoy: () => {
