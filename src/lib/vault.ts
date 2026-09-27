@@ -2,7 +2,7 @@ import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { managedNonce, randomBytes } from "@noble/ciphers/utils.js";
 import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import type { BufferEntry, Consent, CustodyEntry, EvidenceItem, NetworkState, ParticipatingNode, Profile, ProtocolLog, SafetyEvent, TraceCase, TrustedContact } from "@/lib/protocol";
+import type { BufferEntry, CustodyEntry, EvidenceItem, NetworkState, ParticipatingNode, Profile, ProtocolLog, SafetyEvent, TraceCase, TrustedContact } from "@/lib/protocol";
 
 export const VAULT_KEY = "sentinel-v2";
 const LEGACY_KEY = "sentinel-v1";
