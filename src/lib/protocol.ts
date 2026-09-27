@@ -1,5 +1,4 @@
 import { fingerprint, shortHash, uid } from "@/lib/format";
-import type { DeviceIdentity } from "@/lib/identity";
 
 export type Surface = "sentinel" | "trace" | "blackbox";
 export type DeliveryState = "local" | "queued" | "handed-off" | "acknowledged" | "failed";
