@@ -86,7 +86,9 @@ export function readVault(): VaultRecord | null {
   }
 }
 
-function normalisePayload(payload: VaultPayload): VaultPayload { return { ...payload, outbox: payload.outbox ?? [] }; }\n\nexport function unlockVault(record: VaultRecord, pin: string): { mode: "unlocked" | "decoy" | "bad"; key?: Uint8Array; payload?: VaultPayload } {
+function normalisePayload(payload: VaultPayload): VaultPayload { return { ...payload, outbox: payload.outbox ?? [] }; }
+
+export function unlockVault(record: VaultRecord, pin: string): { mode: "unlocked" | "decoy" | "bad"; key?: Uint8Array; payload?: VaultPayload } {
   const realKey = deriveKey(pin, record.realSalt);
   if (open<string>(record.realProbe, realKey) === "SENTINEL-REAL-PROBE-V2") {
     const payload = open<VaultPayload>(record.payload, realKey);
