@@ -214,7 +214,7 @@ const saveIfUnlocked = (state: ProtocolState) => {
   try {
     persistVault(record, sessionKey, {
       profile: state.profile, contacts: state.contacts, nodes: state.nodes, cases: state.cases,
-      evidence: state.evidence, events: state.events, buffer: state.buffer, custody: state.custody, log: state.log, network: state.network
+      evidence: state.evidence, events: state.events, buffer: state.buffer, custody: state.custody, log: state.log, network: state.network, outbox: state.outbox
     });
   } catch {
     useProtocol.setState({ storageError: "The local vault could not be written. Check available device storage before continuing." });
