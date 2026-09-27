@@ -1,32 +1,229 @@
-import {create} from "zustand";
-import {persist,createJSONStorage} from "zustand/middleware";
-import {uid,shortHash,randomSalt} from "@/lib/format";
-import {BUFFER_HOURS,RETENTION_HOURS,type BufferEntry,type Consent,type CustodyEntry,type EvidenceItem,type NetworkState,type Profile,type ProtocolLog,type SafetyEvent,type TraceCase,type TrustedContact,type ParticipatingNode,type TriggerKind,type LastKnownEvent,buildDemo,buildHops,emptyProfile,eventNetworkFrom,hashPin,nextCaseRef} from "@/lib/protocol";
-export type SessionMode="unlocked"|"locked"|"decoy";
-interface ProtocolState{
- hasHydrated:boolean;session:SessionMode;profile:Profile;contacts:TrustedContact[];nodes:ParticipatingNode[];cases:TraceCase[];evidence:EvidenceItem[];events:SafetyEvent[];buffer:BufferEntry[];custody:CustodyEntry[];log:ProtocolLog[];network:NetworkState;pinError:string|null;
- setHydrated:()=>void;loadDemo:()=>void;completeSetup:(input:{displayName:string;pin:string;decoyPin:string;contacts:{name:string;relationship:string}[];consent:Omit<Consent,"acceptedAt">})=>void;lock:()=>void;unlock:(pin:string)=>"ok"|"decoy"|"bad";exitDecoy:()=>void;setNetwork:(c:NetworkState["cellular"])=>void;setArmed:(a:boolean)=>void;triggerSentinel:(t:TriggerKind)=>string;markHopDelivered:(e:string,n:string)=>void;openCase:(i:{subject:string;relation:"self"|"trusted";openedBy:string})=>string;requestPreservation:(c:string,n:string)=>void;resolveCase:(c:string)=>void;addCheckIn:(p:string)=>void;addNote:(t:string,b:string)=>void;emergencyWipe:()=>void;resetAll:()=>void;
+import { create } from "zustand";
+import { uid, shortHash, randomSalt } from "@/lib/format";
+import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TrustedContact, type ParticipatingNode, type TriggerKind, type LastKnownEvent, buildDemo, buildHops, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
+import { createVault, persistVault, readVault, unlockVault, wipeVault, type VaultPayload } from "@/lib/vault";
+
+export type SessionMode = "unlocked" | "locked" | "decoy";
+
+interface ProtocolState extends VaultPayload {
+  hasHydrated: boolean;
+  session: SessionMode;
+  pinError: string | null;
+  storageError: string | null;
+  setHydrated: () => void;
+  loadDemo: () => void;
+  completeSetup: (input: { displayName: string; pin: string; decoyPin: string; contacts: { name: string; relationship: string }[]; consent: Omit<Consent, "acceptedAt"> }) => void;
+  lock: () => void;
+  unlock: (pin: string) => "ok" | "decoy" | "bad";
+  exitDecoy: () => void;
+  setNetwork: (c: NetworkState["cellular"]) => void;
+  setArmed: (a: boolean) => void;
+  triggerSentinel: (t: TriggerKind) => string;
+  markHopDelivered: (e: string, n: string) => void;
+  openCase: (i: { subject: string; relation: "self" | "trusted"; openedBy: string }) => string;
+  requestPreservation: (c: string, n: string) => void;
+  resolveCase: (c: string) => void;
+  addCheckIn: (p: string) => void;
+  addNote: (t: string, b: string) => void;
+  emergencyWipe: () => void;
+  resetAll: () => void;
 }
-const initialNetwork:NetworkState={cellular:"down",ble:true,mesh:true};
-const logLine=(surface:ProtocolLog["surface"],text:string):ProtocolLog=>({id:uid("log"),at:Date.now(),surface,text});
-const custodyLine=(action:string,actor:CustodyEntry["actor"],detail:string):CustodyEntry=>({id:uid("cus"),at:Date.now(),action,actor,detail});
-export const useProtocol=create<ProtocolState>()(persist((set,get)=>({
- hasHydrated:false,session:"unlocked",profile:emptyProfile(),contacts:[],nodes:[],cases:[],evidence:[],events:[],buffer:[],custody:[],log:[],network:initialNetwork,pinError:null,
- setHydrated:()=>set({hasHydrated:true}),
- loadDemo:()=>{const d=buildDemo();set({session:"unlocked",profile:d.profile,contacts:d.contacts,nodes:d.nodes,cases:d.cases,evidence:d.evidence,events:d.events,buffer:d.buffer,custody:d.custody,log:d.log,network:initialNetwork,pinError:null});},
- completeSetup:({displayName,pin,decoyPin,contacts,consent})=>{const now=Date.now(),pinSalt=randomSalt();set({session:"unlocked",profile:{displayName:displayName.trim(),pinHash:hashPin(pin,pinSalt),decoyPinHash:hashPin(decoyPin,pinSalt),pinSalt,setupComplete:true,armed:true,consent:{...consent,acceptedAt:now},demo:false},contacts:contacts.filter(c=>c.name.trim()).map(c=>({id:uid("c"),name:c.name.trim(),relationship:c.relationship.trim()||"Trusted",keyFingerprint:`SEN-${shortHash(c.name+now).slice(0,4)}-${shortHash(c.relationship+c.name).slice(0,4)}`.toUpperCase(),authorised:true})),nodes:[],cases:[],evidence:[],events:[],buffer:[],custody:[custodyLine("Protocol armed","user","Consent recorded. Silent tracking remains off.")],log:[logLine("protocol","Protocol armed. No wearable or participating infrastructure is connected yet.")],network:{cellular:"up",ble:false,mesh:false},pinError:null});},
- lock:()=>set({session:"locked",pinError:null}),
- unlock:(pin)=>{const p=get().profile;if(!p.pinSalt)return "bad";const h=hashPin(pin,p.pinSalt);if(h===p.pinHash){set({session:"unlocked",pinError:null});return"ok";}if(h===p.decoyPinHash){set({session:"decoy",pinError:null});return"decoy";}set({pinError:"That PIN does not match."});return"bad";},
- exitDecoy:()=>set({session:"locked",pinError:null}),
- setNetwork:(cellular)=>set(s=>({network:{...s.network,cellular},log:[logLine("protocol",`Network set to ${cellular}.`),...s.log].slice(0,40)})),
- setArmed:(armed)=>set(s=>({profile:{...s.profile,armed},log:[logLine("sentinel",armed?"Sentinel armed.":"Sentinel disarmed."),...s.log].slice(0,40)})),
- triggerSentinel:(trigger)=>{const s=get();if(!s.profile.armed)return"";const at=Date.now(),id=uid("ev"),hops=buildHops(s.nodes,s.contacts,at),network=eventNetworkFrom(s.network.cellular);const event:SafetyEvent={id,triggeredAt:at,surface:"sentinel",trigger,network,meshHops:hops,status:network==="cellular"?"relayed":"queued",lockScreenLeak:false};const lk:LastKnownEvent={id:uid("lk"),at,kind:"trigger",title:"Discrete trigger",detail:`Sentinel ${trigger.replace(/-/g," ")}. Phone locked. Lock screen stayed dark. Network: ${network}.`,source:"device",verified:true};const buf:BufferEntry={id:uid("buf"),at,kind:"sensor",title:"Sentinel trigger",body:`${trigger} · ${network} · BLE ${s.network.ble?"up":"down"}`,hash:shortHash(`sentinel:${id}:${at}`),expiresAt:at+BUFFER_HOURS*3600_000,sourceOfTruth:true};const open=s.cases.find(c=>c.status==="open"||c.status==="coordinating");set({events:[event,...s.events],buffer:[buf,...s.buffer],cases:s.cases.map(c=>open&&c.id===open.id?{...c,lastKnown:[...c.lastKnown,lk],eventIds:[...c.eventIds,id]}:c),custody:[custodyLine("Safety event queued","device",`Trigger ${trigger}. No lock-screen notification.`),...s.custody],log:[logLine("sentinel",`Safety event ${network==="cellular"?"relayed":"queued offline"} · ${hops.length} hops.`),...s.log].slice(0,40)});return id;},
- markHopDelivered:(eventId,nodeId)=>set(s=>({events:s.events.map(e=>{if(e.id!==eventId)return e;const meshHops=e.meshHops.map(h=>h.nodeId===nodeId?{...h,delivered:true}:h);return{...e,meshHops,status:meshHops.every(h=>h.delivered)?"acknowledged":e.status};})})),
- openCase:({subject,relation,openedBy})=>{const s=get(),at=Date.now(),id=uid("case"),ref=nextCaseRef(s.cases),lastFromBuffer:LastKnownEvent[]=s.buffer.filter(b=>["location","note","sensor"].includes(b.kind)).slice(0,4).reverse().map(b=>({id:uid("lk"),at:b.at,kind:b.kind==="location"?"place":"check-in",title:b.title,detail:b.body,source:"device",verified:true}));const ev:EvidenceItem={id:uid("evd"),caseId:id,kind:"original",media:"note",title:"Case opened — no footage transferred",body:"Authorised nodes have not been asked to preserve yet. Originals stay at source.",capturedAt:at,hash:shortHash(`open:${id}`),sourceOfTruth:true};const next:TraceCase={id,ref,subject:subject.trim(),relation,openedAt:at,openedBy,status:"open",headline:`${subject.trim()} has not arrived`,lastKnown:lastFromBuffer,nodeIds:s.nodes.map(n=>n.id),eventIds:[],evidenceIds:[ev.id],retentionHours:RETENTION_HOURS};set({cases:[next,...s.cases],evidence:[ev,...s.evidence],custody:[custodyLine("Case opened",relation==="self"?"user":"trusted-contact",`${ref} · ${next.headline}`),...s.custody],log:[logLine("trace",`Case ${ref} opened — ${next.headline}.`),...s.log].slice(0,40)});return id;},
- requestPreservation:(caseId,nodeId)=>{const at=Date.now(),node=get().nodes.find(n=>n.id===nodeId);if(!node)return;const ev:EvidenceItem={id:uid("evd"),caseId,kind:"original",media:"cctv-hold",title:`Hold placed · ${node.name}`,body:`${node.note} Footage is not copied off-site. Retention ${RETENTION_HOURS}h.`,capturedAt:at,hash:shortHash(`hold:${nodeId}:${at}`),sourceOfTruth:true};const derivative:EvidenceItem={id:uid("evd"),caseId,kind:"derivative",media:"summary",title:`Hold receipt · ${node.name}`,body:`Derivative receipt: preservation requested at ${new Date(at).toISOString()}. Original remains at the node.`,capturedAt:at,hash:shortHash(`sum:${nodeId}:${at}`),sourceOfTruth:false};set(s=>({nodes:s.nodes.map(n=>n.id===nodeId?{...n,status:"preserving",requestedAt:at,retainsUntil:at+RETENTION_HOURS*3600_000}:n),cases:s.cases.map(c=>c.id===caseId?{...c,status:"coordinating",evidenceIds:[...c.evidenceIds,ev.id,derivative.id],lastKnown:[...c.lastKnown,{id:uid("lk"),at,kind:"node-sighting",title:`Preservation hold · ${node.name}`,detail:"Node acknowledged. No open camera access. Original stays on site.",source:"node",verified:true}]}:c),evidence:[ev,derivative,...s.evidence],custody:[custodyLine("Preservation hold","node",`${node.name} · ${RETENTION_HOURS}h local retain`),...s.custody],log:[logLine("trace",`Hold placed at ${node.name}. Originals not transferred.`),...s.log].slice(0,40)}));},
- resolveCase:(caseId)=>set(s=>({cases:s.cases.map(c=>c.id===caseId?{...c,status:"resolved"}:c),nodes:s.nodes.map(n=>n.status==="preserving"||n.status==="preservation-requested"?{...n,status:"released"}:n),log:[logLine("trace","Case resolved. Node holds released."),...s.log].slice(0,40)})),
- addCheckIn:(place)=>{const at=Date.now(),buf:BufferEntry={id:uid("buf"),at,kind:"location",title:`Check-in · ${place}`,body:"Explicit check-in. Coarse place name. Not a live track.",hash:shortHash(`checkin:${place}:${at}`),expiresAt:at+BUFFER_HOURS*3600_000,sourceOfTruth:true},lk:LastKnownEvent={id:uid("lk"),at,kind:"check-in",title:`Check-in · ${place}`,detail:"Person at risk confirmed they are here.",source:"user",verified:true};set(s=>{const open=s.cases.find(c=>c.status==="open"||c.status==="coordinating");return{buffer:[buf,...s.buffer],cases:s.cases.map(c=>open&&c.id===open.id?{...c,lastKnown:[...c.lastKnown,lk]}:c),custody:[custodyLine("Check-in recorded","user",place),...s.custody],log:[logLine("protocol",`Check-in at ${place}.`),...s.log].slice(0,40)}});},
- addNote:(title,body)=>{const at=Date.now();set(s=>({buffer:[{id:uid("buf"),at,kind:"note",title,body,hash:shortHash(`note:${title}:${at}`),expiresAt:at+BUFFER_HOURS*3600_000,sourceOfTruth:true},...s.buffer],custody:[custodyLine("Note written","user","Local buffer only"),...s.custody]}));},
- emergencyWipe:()=>{if(typeof window!=="undefined")window.localStorage.removeItem("sentinel-v1");set(s=>({session:"locked",profile:emptyProfile(),contacts:[],nodes:s.nodes.map(n=>({...n,status:"idle",requestedAt:undefined,retainsUntil:undefined})),cases:[],evidence:[],events:[],buffer:[],custody:[],log:[],network:initialNetwork,pinError:null}));},
- resetAll:()=>{if(typeof window!=="undefined")window.localStorage.removeItem("sentinel-v1");set({session:"unlocked",profile:emptyProfile(),contacts:[],nodes:[],cases:[],evidence:[],events:[],buffer:[],custody:[],log:[],network:initialNetwork,pinError:null})},
-}),{name:"sentinel-v1",storage:createJSONStorage(()=>localStorage),skipHydration:true,partialize:s=>({profile:s.profile,contacts:s.contacts,nodes:s.nodes,cases:s.cases,evidence:s.evidence,events:s.events,buffer:s.buffer,custody:s.custody,log:s.log,network:s.network}),onRehydrateStorage:()=>()=>{const state=useProtocol.getState();useProtocol.setState({hasHydrated:true,session:state.profile.setupComplete?"locked":"unlocked"})}}));
+
+const initialNetwork: NetworkState = { cellular: "down", ble: true, mesh: true };
+const emptyPayload = (): VaultPayload => ({ profile: emptyProfile(), contacts: [], nodes: [], cases: [], evidence: [], events: [], buffer: [], custody: [], log: [], network: initialNetwork });
+let sessionKey: Uint8Array | null = null;
+
+const logLine = (surface: ProtocolLog["surface"], text: string): ProtocolLog => ({ id: uid("log"), at: Date.now(), surface, text });
+const custodyLine = (action: string, actor: CustodyEntry["actor"], detail: string): CustodyEntry => ({ id: uid("cus"), at: Date.now(), action, actor, detail });
+
+export const useProtocol = create<ProtocolState>()((set, get) => ({
+  ...emptyPayload(),
+  hasHydrated: false,
+  session: "unlocked",
+  pinError: null,
+  storageError: null,
+  setHydrated: () => set({ hasHydrated: true }),
+  loadDemo: () => {
+    const d = buildDemo();
+    const created = createVault("1408", "2580", d);
+    sessionKey = created.key;
+    try { window.localStorage.setItem("sentinel-v2", JSON.stringify(created.record)); }
+    catch { set({ storageError: "Local storage is unavailable. The demonstration cannot be persisted." }); }
+    set({ ...d, session: "unlocked", pinError: null, storageError: null });
+  },
+  completeSetup: ({ displayName, pin, decoyPin, contacts, consent }) => {
+    const now = Date.now();
+    const profile: Profile = { displayName: displayName.trim(), setupComplete: true, armed: true, consent: { ...consent, acceptedAt: now }, demo: false };
+    const payload: VaultPayload = {
+      profile,
+      contacts: contacts.filter(c => c.name.trim()).map(c => ({
+        id: uid("c"),
+        name: c.name.trim(),
+        relationship: c.relationship.trim() || "Trusted",
+        keyFingerprint: `SEN-${shortHash(c.name + now).slice(0, 4)}-${shortHash(c.relationship + c.name).slice(0, 4)}`.toUpperCase(),
+        authorised: true
+      })),
+      nodes: [], cases: [], evidence: [], events: [], buffer: [],
+      custody: [custodyLine("Protocol armed", "user", "Consent recorded. Silent tracking remains off.")],
+      log: [logLine("protocol", "Protocol armed. No wearable or participating infrastructure is connected yet.")],
+      network: { cellular: "up", ble: false, mesh: false }
+    };
+    const created = createVault(pin, decoyPin, payload);
+    sessionKey = created.key;
+    try { window.localStorage.setItem("sentinel-v2", JSON.stringify(created.record)); }
+    catch { set({ storageError: "Local storage is unavailable. Setup was not persisted." }); }
+    set({ ...payload, session: "unlocked", pinError: null, storageError: null });
+  },
+  lock: () => {
+    sessionKey = null;
+    set({ ...emptyPayload(), session: "locked", pinError: null, storageError: null });
+  },
+  unlock: (pin) => {
+    const record = readVault();
+    if (!record) { set({ pinError: "No local vault is available." }); return "bad"; }
+    const result = unlockVault(record, pin);
+    if (result.mode === "unlocked" && result.payload && result.key) {
+      sessionKey = result.key;
+      set({ ...result.payload, session: "unlocked", pinError: null, storageError: null });
+      return "ok";
+    }
+    if (result.mode === "decoy") {
+      sessionKey = null;
+      set({ ...emptyPayload(), session: "decoy", pinError: null, storageError: null });
+      return "decoy";
+    }
+    set({ pinError: "That PIN does not match." });
+    return "bad";
+  },
+  exitDecoy: () => {
+    sessionKey = null;
+    set({ ...emptyPayload(), session: "locked", pinError: null });
+  },
+  setNetwork: (cellular) => set(s => ({ network: { ...s.network, cellular }, log: [logLine("protocol", `Network set to ${cellular}.`), ...s.log].slice(0, 40) })),
+  setArmed: (armed) => set(s => ({ profile: { ...s.profile, armed }, log: [logLine("sentinel", armed ? "Sentinel armed." : "Sentinel disarmed."), ...s.log].slice(0, 40) })),
+  triggerSentinel: (trigger) => {
+    const s = get();
+    if (!s.profile.armed) return "";
+    const at = Date.now(), id = uid("ev"), hops = buildHops(s.nodes, s.contacts, at), network = eventNetworkFrom(s.network.cellular);
+    const event: SafetyEvent = { id, triggeredAt: at, surface: "sentinel", trigger, network, meshHops: hops, status: network === "cellular" ? "relayed" : "queued", lockScreenLeak: false };
+    const lk: LastKnownEvent = { id: uid("lk"), at, kind: "trigger", title: "Discrete trigger", detail: `Sentinel ${trigger.replace(/-/g, " ")}. Phone locked. Lock screen stayed dark. Network: ${network}.`, source: "device", verified: true };
+    const buf = { id: uid("buf"), at, kind: "sensor" as const, title: "Sentinel trigger", body: `${trigger} · ${network} · BLE ${s.network.ble ? "up" : "down"}`, hash: shortHash(`sentinel:${id}:${at}`), expiresAt: at + BUFFER_HOURS * 3600_000, sourceOfTruth: true };
+    const open = s.cases.find(c => c.status === "open" || c.status === "coordinating");
+    set({
+      events: [event, ...s.events],
+      buffer: [buf, ...s.buffer],
+      cases: s.cases.map(c => open && c.id === open.id ? { ...c, lastKnown: [...c.lastKnown, lk], eventIds: [...c.eventIds, id] } : c),
+      custody: [custodyLine("Safety event queued", "device", `Trigger ${trigger}. No lock-screen notification.`), ...s.custody],
+      log: [logLine("sentinel", `Safety event ${network === "cellular" ? "relayed" : "queued offline"} · ${hops.length} hops.`), ...s.log].slice(0, 40)
+    });
+    return id;
+  },
+  markHopDelivered: (eventId, nodeId) => set(s => ({ events: s.events.map(e => e.id !== eventId ? e : { ...e, meshHops: e.meshHops.map(h => h.nodeId === nodeId ? { ...h, delivered: true } : h), status: e.meshHops.map(h => h.nodeId === nodeId ? { ...h, delivered: true } : h).every(h => h.delivered) ? "acknowledged" : e.status }) })),
+  openCase: ({ subject, relation, openedBy }) => {
+    const s = get(), at = Date.now(), cleanSubject = subject.trim();
+    if (!cleanSubject) return "";
+    const id = uid("case"), ref = nextCaseRef(s.cases);
+    const lastFromBuffer: LastKnownEvent[] = s.buffer.filter(b => ["location", "note", "sensor"].includes(b.kind)).slice(0, 4).reverse().map(b => ({ id: uid("lk"), at: b.at, kind: b.kind === "location" ? "place" : "check-in", title: b.title, detail: b.body, source: "device", verified: true }));
+    const ev: EvidenceItem = { id: uid("evd"), caseId: id, kind: "original", media: "note", title: "Case opened — no footage transferred", body: "Authorised nodes have not been asked to preserve yet. Originals stay at source.", capturedAt: at, hash: shortHash(`open:${id}`), sourceOfTruth: true };
+    const next: TraceCase = { id, ref, subject: cleanSubject, relation, openedAt: at, openedBy: openedBy.trim() || "Device user", status: "open", headline: `${cleanSubject} has not arrived`, lastKnown: lastFromBuffer, nodeIds: s.nodes.map(n => n.id), eventIds: [], evidenceIds: [ev.id], retentionHours: RETENTION_HOURS };
+    set({ cases: [next, ...s.cases], evidence: [ev, ...s.evidence], custody: [custodyLine("Case opened", relation === "self" ? "user" : "trusted-contact", `${ref} · ${next.headline}`), ...s.custody], log: [logLine("trace", `Case ${ref} opened — ${next.headline}.`), ...s.log].slice(0, 40) });
+    return id;
+  },
+  requestPreservation: (caseId, nodeId) => {
+    const at = Date.now(), state = get(), node = state.nodes.find(n => n.id === nodeId), targetCase = state.cases.find(c => c.id === caseId);
+    if (!node || !targetCase || targetCase.status === "resolved" || node.status === "released" || node.status === "preserving") return;
+    const ev: EvidenceItem = { id: uid("evd"), caseId, kind: "original", media: "cctv-hold", title: `Hold placed · ${node.name}`, body: `${node.note} Footage is not copied off-site. Retention ${RETENTION_HOURS}h.`, capturedAt: at, hash: shortHash(`hold:${nodeId}:${at}`), sourceOfTruth: true };
+    const derivative: EvidenceItem = { id: uid("evd"), caseId, kind: "derivative", media: "summary", title: `Hold receipt · ${node.name}`, body: `Derivative receipt: preservation requested at ${new Date(at).toISOString()}. Original remains at the node.`, capturedAt: at, hash: shortHash(`sum:${nodeId}:${at}`), sourceOfTruth: false };
+    set(s => ({
+      nodes: s.nodes.map(n => n.id === nodeId ? { ...n, status: "preserving", requestedAt: at, retainsUntil: at + RETENTION_HOURS * 3600_000 } : n),
+      cases: s.cases.map(c => c.id === caseId ? { ...c, status: "coordinating", evidenceIds: [...c.evidenceIds, ev.id, derivative.id], lastKnown: [...c.lastKnown, { id: uid("lk"), at, kind: "node-sighting", title: `Preservation hold · ${node.name}`, detail: "Node acknowledged. No open camera access. Original stays on site.", source: "node", verified: true }] } : c),
+      evidence: [ev, derivative, ...s.evidence],
+      custody: [custodyLine("Preservation hold", "node", `${node.name} · ${RETENTION_HOURS}h local retain`), ...s.custody],
+      log: [logLine("trace", `Hold placed at ${node.name}. Originals not transferred.`), ...s.log].slice(0, 40)
+    }));
+  },
+  resolveCase: (caseId) => set(s => ({ cases: s.cases.map(c => c.id === caseId ? { ...c, status: "resolved" } : c), nodes: s.nodes.map(n => n.status === "preserving" || n.status === "preservation-requested" ? { ...n, status: "released" } : n), log: [logLine("trace", "Case resolved. Node holds released."), ...s.log].slice(0, 40) })),
+  addCheckIn: (place) => {
+    const cleanPlace = place.trim();
+    if (!cleanPlace) return;
+    const at = Date.now(), buf = { id: uid("buf"), at, kind: "location" as const, title: `Check-in · ${cleanPlace}`, body: "Explicit check-in. Coarse place name. Not a live track.", hash: shortHash(`checkin:${cleanPlace}:${at}`), expiresAt: at + BUFFER_HOURS * 3600_000, sourceOfTruth: true };
+    const lk: LastKnownEvent = { id: uid("lk"), at, kind: "check-in", title: `Check-in · ${cleanPlace}`, detail: "Person at risk confirmed they are here.", source: "user", verified: true };
+    set(s => {
+      const open = s.cases.find(c => c.status === "open" || c.status === "coordinating");
+      return { buffer: [buf, ...s.buffer], cases: s.cases.map(c => open && c.id === open.id ? { ...c, lastKnown: [...c.lastKnown, lk] } : c), custody: [custodyLine("Check-in recorded", "user", cleanPlace), ...s.custody], log: [logLine("protocol", `Check-in at ${cleanPlace}.`), ...s.log].slice(0, 40) };
+    });
+  },
+  addNote: (title, body) => {
+    const cleanTitle = title.trim(), cleanBody = body.trim();
+    if (!cleanTitle || !cleanBody) return;
+    const at = Date.now();
+    set(s => ({ buffer: [{ id: uid("buf"), at, kind: "note", title: cleanTitle, body: cleanBody, hash: shortHash(`note:${cleanTitle}:${at}`), expiresAt: at + BUFFER_HOURS * 3600_000, sourceOfTruth: true }, ...s.buffer], custody: [custodyLine("Note written", "user", "Local buffer only"), ...s.custody] }));
+  },
+  emergencyWipe: () => {
+    sessionKey = null;
+    wipeVault();
+    set({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
+  },
+  resetAll: () => {
+    sessionKey = null;
+    wipeVault();
+    set({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
+  }
+}));
+
+const saveIfUnlocked = (state: ProtocolState) => {
+  if (!sessionKey || !state.hasHydrated || state.session !== "unlocked" || !state.profile.setupComplete) return;
+  const record = readVault();
+  if (!record) return;
+  try {
+    persistVault(record, sessionKey, {
+      profile: state.profile, contacts: state.contacts, nodes: state.nodes, cases: state.cases,
+      evidence: state.evidence, events: state.events, buffer: state.buffer, custody: state.custody, log: state.log, network: state.network
+    });
+  } catch {
+    useProtocol.setState({ storageError: "The local vault could not be written. Check available device storage before continuing." });
+  }
+};
+
+useProtocol.subscribe(saveIfUnlocked);
+
+export function hydrateVault() {
+  try {
+    const record = readVault();
+    if (!record) {
+      wipeVault();
+      useProtocol.setState({ hasHydrated: true, session: "unlocked" });
+      return;
+    }
+    sessionKey = null;
+    useProtocol.setState({ hasHydrated: true, session: "locked", ...emptyPayload(), pinError: null, storageError: null });
+  } catch {
+    sessionKey = null;
+    useProtocol.setState({ hasHydrated: true, session: "locked", pinError: "The local vault could not be opened.", storageError: "Stored local data is unavailable." });
+  }
+}
+
+if (typeof window !== "undefined") {
+  hydrateVault();
+  window.addEventListener("storage", event => {
+    if (event.key !== "sentinel-v2") {
+      if (event.key === "sentinel-v2" && event.newValue === null) {
+        sessionKey = null;
+        useProtocol.setState({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
+      }
+      return;
+    }
+    if (!event.newValue) {
+      sessionKey = null;
+      useProtocol.setState({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
+      return;
+    }
+    if (sessionKey) {
+      try {
+        const record = JSON.parse(event.newValue);
+        const unlocked = unlockVault(record, "");
+        if (unlocked.mode === "unlocked" && unlocked.payload) useProtocol.setState(unlocked.payload);
+      } catch { /* another tab may be writing; keep current in-memory state */ }
+    }
+  });
+}
