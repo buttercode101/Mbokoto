@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createSentinelEnvelope, advanceDelivery } from "@/lib/engine";
+import { putEvidenceBlob, wipeEvidenceBlobs } from "@/lib/evidence";
 import { uid, shortHash } from "@/lib/format";
 import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TrustedContact, type ParticipatingNode, type TriggerKind, type LastKnownEvent, buildDemo, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
 import { createVault, persistVault, readVault, unlockVault, wipeVault, type VaultPayload } from "@/lib/vault";
@@ -22,6 +23,7 @@ interface ProtocolState extends VaultPayload {
   triggerSentinel: (t: TriggerKind) => string;
   markHopDelivered: (e: string, n: string) => void;
   handoffEnvelope: (id: string, channel: "system-share" | "copy") => Promise<string>;
+  addEvidenceFile: (file: File, caseId?: string) => Promise<string>;
   openCase: (i: { subject: string; relation: "self" | "trusted"; openedBy: string }) => string;
   requestPreservation: (c: string, n: string) => void;
   resolveCase: (c: string) => void;
@@ -139,6 +141,19 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
     const next = advanceDelivery(envelope, channel);
     set(s => ({ outbox: s.outbox.map(e => e.id === id ? next : e), events: next.eventId ? s.events.map(e => e.id === next.eventId ? { ...e, status: "handed-off" } : e) : s.events, custody: [custodyLine("Safety handoff recorded", "user", `${channel} · ${next.id}`), ...s.custody], log: [logLine("sentinel", `Safety envelope handed to ${channel}. Recipient acknowledgement remains unverified.`), ...s.log].slice(0,40) }));
     return next.body;
+  },
+  addEvidenceFile: async (file, caseId) => {
+    if (!sessionKey) return "";
+    try {
+      const record = await putEvidenceBlob({ file, caseId: caseId ?? null, originalName: file.name, key: sessionKey });
+      const at = record.capturedAt;
+      const item: EvidenceItem = { id: record.id, caseId: caseId ?? "", kind: "original", media: file.type.startsWith("image/") ? "photo-hash" : file.type.startsWith("audio/") ? "audio-buffer" : "note", title: file.name, body: `Encrypted local evidence · ${record.size} bytes · hash ${record.hash}`, capturedAt: at, hash: record.hash, sourceOfTruth: true };
+      set(s => ({ evidence: [item, ...s.evidence], custody: [custodyLine("Evidence captured", "device", `${file.name} · encrypted local object`), ...s.custody], log: [logLine("blackbox", `Evidence captured locally · ${record.hash}.`), ...s.log].slice(0,40) }));
+      return record.id;
+    } catch {
+      set({ storageError: "The evidence object could not be stored securely on this device." });
+      return "";
+    }
   },
   openCase: ({ subject, relation, openedBy }) => {
     const s = get(), at = Date.now(), cleanSubject = subject.trim();
