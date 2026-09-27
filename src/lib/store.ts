@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createSentinelEnvelope, advanceDelivery, type ProtocolEnvelope } from "@/lib/engine";
 import { uid, shortHash } from "@/lib/format";
 import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TrustedContact, type ParticipatingNode, type TriggerKind, type LastKnownEvent, buildDemo, buildHops, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
 import { createVault, persistVault, readVault, unlockVault, wipeVault, type VaultPayload } from "@/lib/vault";
@@ -20,6 +21,7 @@ interface ProtocolState extends VaultPayload {
   setArmed: (a: boolean) => void;
   triggerSentinel: (t: TriggerKind) => string;
   markHopDelivered: (e: string, n: string) => void;
+  handoffEnvelope: (id: string, channel: "system-share" | "copy") => Promise<string>;
   openCase: (i: { subject: string; relation: "self" | "trusted"; openedBy: string }) => string;
   requestPreservation: (c: string, n: string) => void;
   resolveCase: (c: string) => void;
@@ -30,7 +32,7 @@ interface ProtocolState extends VaultPayload {
 }
 
 const initialNetwork: NetworkState = { cellular: "down", ble: true, mesh: true };
-const emptyPayload = (): VaultPayload => ({ profile: emptyProfile(), contacts: [], nodes: [], cases: [], evidence: [], events: [], buffer: [], custody: [], log: [], network: initialNetwork });
+const emptyPayload = (): VaultPayload => ({ profile: emptyProfile(), contacts: [], nodes: [], cases: [], evidence: [], events: [], buffer: [], custody: [], log: [], network: initialNetwork, outbox: [] });
 let sessionKey: Uint8Array | null = null;
 let failedUnlocks = 0;
 let unlockBlockedUntil = 0;
@@ -68,7 +70,7 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
       nodes: [], cases: [], evidence: [], events: [], buffer: [],
       custody: [custodyLine("Protocol armed", "user", "Consent recorded. Silent tracking remains off.")],
       log: [logLine("protocol", "Protocol armed. No wearable or participating infrastructure is connected yet.")],
-      network: { cellular: "up", ble: false, mesh: false }
+      network: { cellular: "up", ble: false, mesh: false }, outbox: []
     };
     const created = createVault(pin, decoyPin, payload);
     sessionKey = created.key;
@@ -116,7 +118,7 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
     const s = get();
     if (!s.profile.armed) return "";
     const at = Date.now(), id = uid("ev"), hops = buildHops(s.nodes, s.contacts, at), network = eventNetworkFrom(s.network.cellular);
-    const event: SafetyEvent = { id, triggeredAt: at, surface: "sentinel", trigger, network, meshHops: hops, status: network === "cellular" ? "relayed" : "queued", lockScreenLeak: false };
+    const event: SafetyEvent = { id, triggeredAt: at, surface: "sentinel", trigger, network, meshHops: [{nodeId:"phone",label:"This phone (locked)",kind:"phone",at,delivered:true}], status: network === "offline" ? "queued" : "local", lockScreenLeak: false };
     const lk: LastKnownEvent = { id: uid("lk"), at, kind: "trigger", title: "Discrete trigger", detail: `Sentinel ${trigger.replace(/-/g, " ")}. Phone locked. Lock screen stayed dark. Network: ${network}.`, source: "device", verified: true };
     const buf = { id: uid("buf"), at, kind: "sensor" as const, title: "Sentinel trigger", body: `${trigger} · ${network} · BLE ${s.network.ble ? "up" : "down"}`, hash: shortHash(`sentinel:${id}:${at}`), expiresAt: at + BUFFER_HOURS * 3600_000, sourceOfTruth: true };
     const open = s.cases.find(c => c.status === "open" || c.status === "coordinating");
@@ -125,11 +127,19 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
       buffer: [buf, ...s.buffer],
       cases: s.cases.map(c => open && c.id === open.id ? { ...c, lastKnown: [...c.lastKnown, lk], eventIds: [...c.eventIds, id] } : c),
       custody: [custodyLine("Safety event queued", "device", `Trigger ${trigger}. No lock-screen notification.`), ...s.custody],
-      log: [logLine("sentinel", `Safety event ${network === "cellular" ? "relayed" : "queued offline"} · ${hops.length} hops.`), ...s.log].slice(0, 40)
+      outbox: [createSentinelEnvelope(event, network), ...s.outbox],
+      log: [logLine("sentinel", `Safety event created locally · explicit handoff required.`), ...s.log].slice(0, 40)
     });
     return id;
   },
   markHopDelivered: (eventId, nodeId) => set(s => ({ events: s.events.map(e => e.id !== eventId ? e : { ...e, meshHops: e.meshHops.map(h => h.nodeId === nodeId ? { ...h, delivered: true } : h), status: e.meshHops.map(h => h.nodeId === nodeId ? { ...h, delivered: true } : h).every(h => h.delivered) ? "acknowledged" : e.status }) })),
+  handoffEnvelope: async (id, channel) => {
+    const envelope = get().outbox.find(e => e.id === id);
+    if (!envelope) return "";
+    const next = advanceDelivery(envelope, channel);
+    set(s => ({ outbox: s.outbox.map(e => e.id === id ? next : e), events: next.eventId ? s.events.map(e => e.id === next.eventId ? { ...e, status: "handed-off" } : e) : s.events, custody: [custodyLine("Safety handoff recorded", "user", `${channel} · ${next.id}`), ...s.custody], log: [logLine("sentinel", `Safety envelope handed to ${channel}. Recipient acknowledgement remains unverified.`), ...s.log].slice(0,40) }));
+    return next.body;
+  },
   openCase: ({ subject, relation, openedBy }) => {
     const s = get(), at = Date.now(), cleanSubject = subject.trim();
     if (!cleanSubject) return "";
