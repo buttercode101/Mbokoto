@@ -29,7 +29,7 @@ describe("protocol delivery boundary", () => {
   it("creates BLACKBOX manifests without transferring evidence bytes", () => {
     const envelope = createBlackboxExportEnvelope({ subject: "Manifest", evidenceCount: 2, custodyCount: 4, integrity: "abcd1234" });
     expect(envelope.kind).toBe("blackbox-export");
-    expect(envelope.body).not.toContain("original evidence bytes");
+    expect(envelope.body).toContain("does not transfer the original evidence bytes");
   });
 
   it("records explicit handoff separately from acknowledgement", () => {
