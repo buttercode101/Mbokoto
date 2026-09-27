@@ -7,7 +7,9 @@
 - Vite production build runs in CI.
 - Production Vercel configuration installs dev dependencies required to build the Vite application.
 - Security headers are configured at the deployment boundary.
-- PIN verification uses a unique per-device salt and PBKDF2-HMAC-SHA-256 with 600,000 iterations.
+- PIN-derived keys use a unique per-vault salt and PBKDF2-HMAC-SHA-256 with 600,000 iterations.
+- Persisted protocol state is authenticated-encrypted with XChaCha20-Poly1305; local storage contains ciphertext and vault metadata, not the plaintext protocol state.
+- A real and safe-mode PIN use separate salts and authenticated probes; the safe-mode path never decrypts the real payload.
 - Local identifiers use cryptographically strong randomness where the platform provides Web Crypto.
 - Evidence fingerprints use SHA-256 rather than the previous non-cryptographic 32-bit hash.
 - A hydrated configured device starts locked; sensitive surfaces are not rendered before local state hydration completes.
@@ -18,7 +20,7 @@
 
 ## Security boundary
 
-SENTINEL is a local-first browser application. Browser local storage is not a hardware-backed secure enclave and must not be treated as protection against malware, browser extensions, or an attacker with filesystem access to the browser profile. This product therefore treats the PIN as an application access control, not as proof that the underlying device is uncompromised.
+SENTINEL is a local-first browser application. Browser local storage is not a hardware-backed secure enclave and must not be treated as protection against malware, browser extensions, or an attacker with active JavaScript access to the page or browser profile. Encryption materially reduces plaintext disclosure from storage inspection, but the four-digit PIN still has a finite 10,000-value search space; this is application-level protection, not device-compromise resistance.
 
 The current browser implementation also does not provide a real cellular relay, wearable integration, mesh network, CCTV integration, or trusted-contact network service. Those paths remain explicitly local/demo behavior until an actual transport and service boundary exists.
 
