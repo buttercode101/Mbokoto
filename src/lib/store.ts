@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { uid, shortHash, randomSalt } from "@/lib/format";
+import { uid, shortHash } from "@/lib/format";
 import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TrustedContact, type ParticipatingNode, type TriggerKind, type LastKnownEvent, buildDemo, buildHops, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
 import { createVault, persistVault, readVault, unlockVault, wipeVault, type VaultPayload } from "@/lib/vault";
 
@@ -218,12 +218,6 @@ if (typeof window !== "undefined") {
       useProtocol.setState({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
       return;
     }
-    if (sessionKey) {
-      try {
-        const record = JSON.parse(event.newValue);
-        const unlocked = unlockVault(record, "");
-        if (unlocked.mode === "unlocked" && unlocked.payload) useProtocol.setState(unlocked.payload);
-      } catch { /* another tab may be writing; keep current in-memory state */ }
-    }
+    // A non-empty external write cannot be decrypted without re-entering the PIN. Keep this tab state isolated.
   });
 }
