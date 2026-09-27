@@ -68,7 +68,8 @@ export async function relayEnvelope(envelope: ProtocolEnvelope, identity: Device
   let url: URL;
   try {
     url = new URL(contact.relayUrl || `${window.location.origin}/api/v1/relay`);
-    if (url.protocol !== "https:") throw new Error("Relay must use HTTPS.");\n    if (typeof window !== "undefined" && url.origin !== window.location.origin) throw new Error("Relay must use the same origin as the Mbokoto application.");
+    if (url.protocol !== "https:") throw new Error("Relay must use HTTPS.");
+    if (typeof window !== "undefined" && url.origin !== window.location.origin) throw new Error("Relay must use the same origin as the Mbokoto application.");
   } catch {
     return { ok: false, error: "Relay destination must be a valid HTTPS URL." };
   }
