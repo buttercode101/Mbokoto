@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createVault, unlockVault, type VaultPayload } from "@/lib/vault";
 import { emptyProfile } from "@/lib/protocol";
+import { createDeviceIdentity } from "@/lib/identity";
 
 const payload: VaultPayload = {
   profile: { ...emptyProfile(), displayName: "Test User", setupComplete: true },
   contacts: [], nodes: [], cases: [], evidence: [], events: [], buffer: [], custody: [], log: [],
-  network: { cellular: "down", ble: false, mesh: false }
+  network: { cellular: "down", ble: false, mesh: false }, outbox: [], identity: createDeviceIdentity()
 };
 
 describe("encrypted vault", () => {
