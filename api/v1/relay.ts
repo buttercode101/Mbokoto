@@ -64,7 +64,7 @@ export async function GET() {
   return json(200, {
     service: "mbokoto-relay",
     version: 1,
-    status: "configured",
+    status: process.env.MBOKOTO_RELAY_TOKEN && process.env.MBOKOTO_RELAY_TOKEN.length >= 32 ? "configured" : "not-configured",
     persistence: "none",
     acknowledgement: "receipt-only",
   });
@@ -76,6 +76,21 @@ export async function POST(request: Request) {
 
   const auth = request.headers.get("authorization") ?? "";
   if (auth !== `Bearer ${expectedToken}`) return json(401, { ok: false, code: "unauthorised" });
+
+  const now = Date.now();
+  const source = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const bucket = rateBuckets.get(source);
+  if (!bucket || now - bucket.startedAt >= RATE_WINDOW_MS) {
+    rateBuckets.set(source, { startedAt: now, count: 1 });
+  } else {
+    bucket.count += 1;
+    if (bucket.count > RATE_LIMIT) {
+      return new Response(JSON.stringify({ ok: false, code: "rate_limited" }), {
+        status: 429,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Retry-After": "60" },
+      });
+    }
+  }
 
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
     return json(415, { ok: false, code: "json_required" });
@@ -116,12 +131,19 @@ export async function POST(request: Request) {
   }
   if (!valid) return json(401, { ok: false, code: "invalid_signature" });
 
+  for (const [key, seenAt] of seenNonces) {
+    if (now - seenAt > NONCE_TTL_MS) seenNonces.delete(key);
+  }
+  const nonceKey = `${message.senderPublicKey}:${message.nonce}`;
+  if (seenNonces.has(nonceKey)) return json(409, { ok: false, code: "replay_detected" });
+  seenNonces.set(nonceKey, now);
+
   const ackId = crypto.randomUUID();
   return json(200, {
     ok: true,
     acknowledgement: {
       id: ackId,
-      receivedAt: Date.now(),
+      receivedAt: now,
       envelopeId: message.envelopeId,
       senderFingerprint: fingerprint(message.senderPublicKey),
       state: "acknowledged",
