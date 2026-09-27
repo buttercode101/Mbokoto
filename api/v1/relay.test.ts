@@ -62,4 +62,14 @@ describe("relay endpoint", () => {
     expect(body.acknowledgement.state).toBe("acknowledged");
     expect(body.acknowledgement.durability).toBe("receipt-only");
   });
+  it("rejects the same signed nonce twice", async () => {
+    process.env.MBOKOTO_RELAY_TOKEN = "test-token-1234567890-abcdefghijklmnopqrstuvwxyz";
+    const payload = message();
+    const headers = { "content-type": "application/json", authorization: "Bearer test-token-1234567890-abcdefghijklmnopqrstuvwxyz" };
+    const first = await POST(new Request("https://relay.test/api/v1/relay", { method: "POST", headers, body: JSON.stringify(payload) }));
+    const second = await POST(new Request("https://relay.test/api/v1/relay", { method: "POST", headers, body: JSON.stringify(payload) }));
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(409);
+  });
+
 });
