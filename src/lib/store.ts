@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { createSentinelEnvelope, advanceDelivery } from "@/lib/engine";
+import { createSentinelEnvelope, createTraceEnvelope, createBlackboxExportEnvelope, advanceDelivery } from "@/lib/engine";
 import { putEvidenceBlob, wipeEvidenceBlobs } from "@/lib/evidence";
 import { uid, shortHash } from "@/lib/format";
 import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TriggerKind, type LastKnownEvent, buildDemo, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
@@ -24,6 +24,7 @@ interface ProtocolState extends VaultPayload {
   markHopDelivered: (e: string, n: string) => void;
   handoffEnvelope: (id: string, channel: "system-share" | "copy") => Promise<string>;
   addEvidenceFile: (file: File, caseId?: string) => Promise<string>;
+  createBlackboxExport: () => string;
   openCase: (i: { subject: string; relation: "self" | "trusted"; openedBy: string }) => string;
   requestPreservation: (c: string, n: string) => void;
   resolveCase: (c: string) => void;
@@ -167,16 +168,25 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
   },
   requestPreservation: (caseId, nodeId) => {
     const at = Date.now(), state = get(), node = state.nodes.find(n => n.id === nodeId), targetCase = state.cases.find(c => c.id === caseId);
-    if (!node || !targetCase || targetCase.status === "resolved" || node.status === "released" || node.status === "preserving") return;
-    const ev: EvidenceItem = { id: uid("evd"), caseId, kind: "original", media: "cctv-hold", title: `Hold placed · ${node.name}`, body: `${node.note} Footage is not copied off-site. Retention ${RETENTION_HOURS}h.`, capturedAt: at, hash: shortHash(`hold:${nodeId}:${at}`), sourceOfTruth: true };
-    const derivative: EvidenceItem = { id: uid("evd"), caseId, kind: "derivative", media: "summary", title: `Hold receipt · ${node.name}`, body: `Derivative receipt: preservation requested at ${new Date(at).toISOString()}. Original remains at the node.`, capturedAt: at, hash: shortHash(`sum:${nodeId}:${at}`), sourceOfTruth: false };
+    if (!node || !targetCase || targetCase.status === "resolved" || node.status === "released" || node.status === "preserving" || node.status === "preservation-requested") return;
+    const ev: EvidenceItem = { id: uid("evd"), caseId, kind: "original", media: "cctv-hold", title: `Preservation requested · ${node.name}`, body: `${node.note} Request created locally. No footage has been copied or transferred. Awaiting node acknowledgement.`, capturedAt: at, hash: shortHash(`request:${nodeId}:${at}`), sourceOfTruth: true };
+    const derivative: EvidenceItem = { id: uid("evd"), caseId, kind: "derivative", media: "summary", title: `Request receipt · ${node.name}`, body: `Preservation request created at ${new Date(at).toISOString()}. This receipt is not proof that the node received or acted on the request.`, capturedAt: at, hash: shortHash(`receipt:${nodeId}:${at}`), sourceOfTruth: false };
+    const envelope = createTraceEnvelope({ caseId, ref: targetCase.ref, subject: targetCase.subject, nodeName: node.name, note: node.note });
     set(s => ({
-      nodes: s.nodes.map(n => n.id === nodeId ? { ...n, status: "preserving", requestedAt: at, retainsUntil: at + RETENTION_HOURS * 3600_000 } : n),
-      cases: s.cases.map(c => c.id === caseId ? { ...c, status: "coordinating", evidenceIds: [...c.evidenceIds, ev.id, derivative.id], lastKnown: [...c.lastKnown, { id: uid("lk"), at, kind: "node-sighting", title: `Preservation hold · ${node.name}`, detail: "Node acknowledged. No open camera access. Original stays on site.", source: "node", verified: true }] } : c),
+      nodes: s.nodes.map(n => n.id === nodeId ? { ...n, status: "preservation-requested", requestedAt: at, retainsUntil: at + RETENTION_HOURS * 3600_000 } : n),
+      cases: s.cases.map(c => c.id === caseId ? { ...c, status: "coordinating", evidenceIds: [...c.evidenceIds, ev.id, derivative.id], lastKnown: [...c.lastKnown, { id: uid("lk"), at, kind: "node-sighting", title: `Preservation request · ${node.name}`, detail: "Request created. Node acknowledgement is not yet verified.", source: "device", verified: false }] } : c),
       evidence: [ev, derivative, ...s.evidence],
-      custody: [custodyLine("Preservation hold", "node", `${node.name} · ${RETENTION_HOURS}h local retain`), ...s.custody],
-      log: [logLine("trace", `Hold placed at ${node.name}. Originals not transferred.`), ...s.log].slice(0, 40)
+      outbox: [envelope, ...s.outbox],
+      custody: [custodyLine("Preservation requested", "user", `${node.name} · awaiting acknowledgement`), ...s.custody],
+      log: [logLine("trace", `Preservation request created for ${node.name}. No node acknowledgement claimed.`), ...s.log].slice(0, 40)
     }));
+  },
+  createBlackboxExport: () => {
+    const state = get();
+    const integrity = shortHash(state.evidence.map(e => e.hash).concat(state.custody.map(c => c.id)).join("|"));
+    const envelope = createBlackboxExportEnvelope({ subject: "Mbokoto controlled evidence manifest", evidenceCount: state.evidence.length, custodyCount: state.custody.length, integrity });
+    set(s => ({ outbox: [envelope, ...s.outbox], custody: [custodyLine("Export manifest created", "user", integrity), ...s.custody], log: [logLine("blackbox", "Controlled export manifest created locally. Original evidence bytes remain in the local encrypted store."), ...s.log].slice(0,40) }));
+    return envelope.id;
   },
   resolveCase: (caseId) => set(s => ({ cases: s.cases.map(c => c.id === caseId ? { ...c, status: "resolved" } : c), nodes: s.nodes.map(n => n.status === "preserving" || n.status === "preservation-requested" ? { ...n, status: "released" } : n), log: [logLine("trace", "Case resolved. Node holds released."), ...s.log].slice(0, 40) })),
   addCheckIn: (place) => {
