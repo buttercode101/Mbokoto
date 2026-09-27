@@ -1,22 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { putEvidenceBlob, getEvidenceBlob, deleteEvidenceBlob, wipeEvidenceBlobs } from "@/lib/evidence";
+import { openEvidence, sealEvidence } from "@/lib/evidence";
 
-describe("evidence repository", () => {
-  it("preserves original bytes and a content fingerprint", async () => {
-    const file = new Blob(["original incident note"], { type: "text/plain" });
-    const record = await putEvidenceBlob({ file, originalName: "incident.txt" });
-    const loaded = await getEvidenceBlob(record.id);
-    expect(loaded?.originalName).toBe("incident.txt");
-    expect(loaded?.size).toBe(file.size);
-    expect(loaded?.hash).toHaveLength(16);
-    expect(new TextDecoder().decode(loaded?.bytes)).toBe("original incident note");
-    await deleteEvidenceBlob(record.id);
+describe("evidence encryption boundary", () => {
+  const key = new Uint8Array(32).fill(7);
+
+  it("encrypts bytes and recovers the exact original", () => {
+    const original = new TextEncoder().encode("original incident evidence");
+    const sealed = sealEvidence(original, key);
+    expect(sealed.ciphertext).not.toEqual(original);
+    expect(sealed.nonce).toHaveLength(24);
+    expect(sealed.hash).toHaveLength(16);
+    expect(new TextDecoder().decode(openEvidence(sealed, key))).toBe("original incident evidence");
   });
 
-  it("supports emergency deletion of the evidence object store", async () => {
-    await putEvidenceBlob({ file: new Blob(["wipe"]) });
-    await wipeEvidenceBlobs();
-    const loaded = await getEvidenceBlob("missing");
-    expect(loaded).toBeNull();
+  it("rejects a wrong key", () => {
+    const sealed = sealEvidence(new TextEncoder().encode("secret"), key);
+    expect(() => openEvidence(sealed, new Uint8Array(32).fill(8))).toThrow();
   });
 });
