@@ -1,4 +1,3 @@
-import { putEvidenceBlob, wipeEvidenceBlobs } from "@/lib/evidence";
 import { create } from "zustand";
 import { createSentinelEnvelope, advanceDelivery } from "@/lib/engine";
 import { putEvidenceBlob } from "@/lib/evidence";
