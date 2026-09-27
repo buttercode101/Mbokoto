@@ -40,7 +40,14 @@ npm run lint
 See `RELEASE-VERIFICATION.md` for the verified release audit.
 
 
-CI is configured to run the independent Vite build and TypeScript check on every main push and pull request.
+CI is configured to run typecheck, lint, production build, and a high-severity production dependency audit on every main push and pull request.
 
 
 The repository build path is independently maintained from the original preview workspace.
+
+
+## Release boundary
+
+Mbokoto is currently a local-first browser application. The repository contains Vercel deployment configuration, but no public deployment is currently exposed from this repository. A deployment must be verified against the current main commit before this project is represented as publicly released.
+
+The browser stores protocol state locally. Local storage is not a hardware-backed vault; an attacker with browser-profile or JavaScript execution access can bypass application-level controls. The application therefore does not claim device-compromise resistance.
