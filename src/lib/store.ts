@@ -16,7 +16,7 @@ interface ProtocolState extends VaultPayload {
   storageError: string | null;
   setHydrated: () => void;
   loadDemo: () => void;
-  completeSetup: (input: { displayName: string; pin: string; decoyPin: string; contacts: { name: string; relationship: string }[]; consent: Omit<Consent, "acceptedAt"> }) => void;
+  completeSetup: (input: { displayName: string; pin: string; decoyPin: string; contacts: { name: string; relationship: string; relayUrl?: string; relayToken?: string }[]; consent: Omit<Consent, "acceptedAt"> }) => void;
   lock: () => void;
   unlock: (pin: string) => "ok" | "decoy" | "bad";
   exitDecoy: () => void;
@@ -72,8 +72,10 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
         id: uid("c"),
         name: c.name.trim(),
         relationship: c.relationship.trim() || "Trusted",
-        keyFingerprint: `SEN-${shortHash(c.name + now).slice(0, 4)}-${shortHash(c.relationship + c.name).slice(0, 4)}`.toUpperCase(),
-        authorised: true
+        keyFingerprint: null,
+        authorised: true,
+        relayUrl: c.relayUrl?.trim() || undefined,
+        relayToken: c.relayToken?.trim() || undefined
       })),
       nodes: [], cases: [], evidence: [], events: [], buffer: [],
       custody: [custodyLine("Protocol armed", "user", "Consent recorded. Silent tracking remains off.")],
