@@ -45,7 +45,6 @@ export interface VaultPayload {
   custody: CustodyEntry[];
   log: ProtocolLog[];
   network: NetworkState;
-}
   outbox: ProtocolEnvelope[];
 }
 
