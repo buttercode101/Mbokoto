@@ -3,6 +3,7 @@ import { managedNonce, randomBytes } from "@noble/ciphers/utils.js";
 import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import type { BufferEntry, CustodyEntry, EvidenceItem, NetworkState, ParticipatingNode, Profile, ProtocolLog, SafetyEvent, TraceCase, TrustedContact } from "@/lib/protocol";
+import type { ProtocolEnvelope } from "@/lib/engine";
 
 export const VAULT_KEY = "sentinel-v2";
 const LEGACY_KEY = "sentinel-v1";
@@ -44,6 +45,7 @@ export interface VaultPayload {
   custody: CustodyEntry[];
   log: ProtocolLog[];
   network: NetworkState;
+  outbox: ProtocolEnvelope[];
 }
 
 export interface VaultRecord {
@@ -85,11 +87,13 @@ export function readVault(): VaultRecord | null {
   }
 }
 
+function normalisePayload(payload: VaultPayload): VaultPayload { return { ...payload, outbox: payload.outbox ?? [] }; }
+
 export function unlockVault(record: VaultRecord, pin: string): { mode: "unlocked" | "decoy" | "bad"; key?: Uint8Array; payload?: VaultPayload } {
   const realKey = deriveKey(pin, record.realSalt);
   if (open<string>(record.realProbe, realKey) === "SENTINEL-REAL-PROBE-V2") {
     const payload = open<VaultPayload>(record.payload, realKey);
-    if (payload?.profile?.setupComplete) return { mode: "unlocked", key: realKey, payload };
+    if (payload?.profile?.setupComplete) return { mode: "unlocked", key: realKey, payload: normalisePayload(payload) };
     return { mode: "bad" };
   }
   const decoyKey = deriveKey(pin, record.decoySalt);
