@@ -64,11 +64,11 @@ export function createSignedRelayMessage(envelope: ProtocolEnvelope, identity: D
 }
 
 export async function relayEnvelope(envelope: ProtocolEnvelope, identity: DeviceIdentity, contact: TrustedContact): Promise<RelayResult> {
-  if (!contact.relayUrl || !contact.relayToken) return { ok: false, error: "No relay destination is configured for this trusted contact." };
+  if (!contact.relayToken) return { ok: false, error: "No relay token is configured for this trusted contact." };
   let url: URL;
   try {
-    url = new URL(contact.relayUrl);
-    if (url.protocol !== "https:") throw new Error("Relay must use HTTPS.");
+    url = new URL(contact.relayUrl || `${window.location.origin}/api/v1/relay`);
+    if (url.protocol !== "https:") throw new Error("Relay must use HTTPS.");\n    if (typeof window !== "undefined" && url.origin !== window.location.origin) throw new Error("Relay must use the same origin as the Mbokoto application.");
   } catch {
     return { ok: false, error: "Relay destination must be a valid HTTPS URL." };
   }
