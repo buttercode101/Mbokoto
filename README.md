@@ -8,6 +8,16 @@ Mbokoto is the production workspace for the SENTINEL safety platform.
 - **TRACE** — early missing-person response, last-known reconstruction and preservation requests.
 - **BLACKBOX** — survivor-controlled local incident memory, evidence buffering and controlled export.
 
+## Implemented protocol core
+
+The current mainline application is a local-first protocol client with three connected surfaces:
+
+- **SENTINEL:** creates a safety event and a persisted delivery envelope; network availability does not by itself mean the alert was delivered. The user can explicitly hand the envelope to the device share mechanism.
+- **TRACE:** creates preservation requests and keeps them in `preservation-requested` until a real acknowledgement exists. The app does not claim node acknowledgement merely because a request was created.
+- **BLACKBOX:** captures files into an encrypted IndexedDB evidence store, records a content fingerprint and custody entry, and can create a controlled export manifest without transferring original evidence bytes.
+
+The protocol distinguishes local creation, queued state and explicit handoff from recipient acknowledgement. A share-sheet handoff is therefore not represented as verified delivery.
+
 ## Core principles
 
 - Local-first operation.
