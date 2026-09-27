@@ -155,7 +155,7 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
     const envelope = state.outbox.find(e => e.id === id);
     const contact = state.contacts.find(c => c.id === contactId && c.authorised);
     if (!envelope || !contact || !state.identity) return "unconfigured";
-    if (!contact.relayUrl || !contact.relayToken) return "unconfigured";
+    if (!contact.relayToken) return "unconfigured";
     const result = await relayEnvelope(envelope, state.identity, contact);
     if (!result.ok || !result.acknowledgement) {
       set(s => ({
