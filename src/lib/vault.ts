@@ -3,6 +3,7 @@ import { managedNonce, randomBytes } from "@noble/ciphers/utils.js";
 import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import type { BufferEntry, CustodyEntry, EvidenceItem, NetworkState, ParticipatingNode, Profile, ProtocolLog, SafetyEvent, TraceCase, TrustedContact } from "@/lib/protocol";
+import type { DeviceIdentity } from "@/lib/identity";
 import type { ProtocolEnvelope } from "@/lib/engine";
 
 export const VAULT_KEY = "sentinel-v2";
@@ -46,6 +47,7 @@ export interface VaultPayload {
   log: ProtocolLog[];
   network: NetworkState;
   outbox: ProtocolEnvelope[];
+  identity: DeviceIdentity | null;
 }
 
 export interface VaultRecord {

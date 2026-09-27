@@ -28,10 +28,8 @@
     "allowImportingTsExtensions": true
   },
   "include": [
-    "src/main.tsx",
-    "src/App.tsx",
-    "src/lib/format.ts",
-    "src/lib/protocol.ts",
-    "src/lib/store.ts"
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "api/**/*.ts"
   ]
 }

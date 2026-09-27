@@ -1,9 +1,11 @@
 import { create } from "zustand";
-import { createSentinelEnvelope, createTraceEnvelope, createBlackboxExportEnvelope, advanceDelivery } from "@/lib/engine";
+import { createSentinelEnvelope, createTraceEnvelope, createBlackboxExportEnvelope, advanceDelivery, acknowledgeDelivery } from "@/lib/engine";
 import { putEvidenceBlob, wipeEvidenceBlobs } from "@/lib/evidence";
 import { uid, shortHash } from "@/lib/format";
 import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TriggerKind, type LastKnownEvent, buildDemo, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
 import { createVault, persistVault, readVault, unlockVault, wipeVault, type VaultPayload } from "@/lib/vault";
+import { createDeviceIdentity } from "@/lib/identity";
+import { relayEnvelope } from "@/lib/transport";
 
 export type SessionMode = "unlocked" | "locked" | "decoy";
 
@@ -14,7 +16,7 @@ interface ProtocolState extends VaultPayload {
   storageError: string | null;
   setHydrated: () => void;
   loadDemo: () => void;
-  completeSetup: (input: { displayName: string; pin: string; decoyPin: string; contacts: { name: string; relationship: string }[]; consent: Omit<Consent, "acceptedAt"> }) => void;
+  completeSetup: (input: { displayName: string; pin: string; decoyPin: string; contacts: { name: string; relationship: string; relayUrl?: string; relayToken?: string }[]; consent: Omit<Consent, "acceptedAt"> }) => void;
   lock: () => void;
   unlock: (pin: string) => "ok" | "decoy" | "bad";
   exitDecoy: () => void;
@@ -23,6 +25,7 @@ interface ProtocolState extends VaultPayload {
   triggerSentinel: (t: TriggerKind) => string;
   markHopDelivered: (e: string, n: string) => void;
   handoffEnvelope: (id: string, channel: "system-share" | "copy") => Promise<string>;
+  relayEnvelopeToContact: (id: string, contactId: string) => Promise<"acknowledged" | "failed" | "unconfigured">;
   addEvidenceFile: (file: File, caseId?: string) => Promise<string>;
   createBlackboxExport: () => string;
   openCase: (i: { subject: string; relation: "self" | "trusted"; openedBy: string }) => string;
@@ -35,7 +38,7 @@ interface ProtocolState extends VaultPayload {
 }
 
 const initialNetwork: NetworkState = { cellular: "down", ble: true, mesh: true };
-const emptyPayload = (): VaultPayload => ({ profile: emptyProfile(), contacts: [], nodes: [], cases: [], evidence: [], events: [], buffer: [], custody: [], log: [], network: initialNetwork, outbox: [] });
+const emptyPayload = (): VaultPayload => ({ profile: emptyProfile(), contacts: [], nodes: [], cases: [], evidence: [], events: [], buffer: [], custody: [], log: [], network: initialNetwork, outbox: [], identity: null });
 let sessionKey: Uint8Array | null = null;
 let failedUnlocks = 0;
 let unlockBlockedUntil = 0;
@@ -52,11 +55,13 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
   setHydrated: () => set({ hasHydrated: true }),
   loadDemo: () => {
     const d = buildDemo();
-    const created = createVault("1408", "2580", d);
+    const identity = createDeviceIdentity();
+    const demoPayload = { ...d, identity };
+    const created = createVault("1408", "2580", demoPayload);
     sessionKey = created.key;
     try { window.localStorage.setItem("sentinel-v2", JSON.stringify(created.record)); }
     catch { set({ storageError: "Local storage is unavailable. The demonstration cannot be persisted." }); }
-    set({ ...d, session: "unlocked", pinError: null, storageError: null });
+    set({ ...demoPayload, session: "unlocked", pinError: null, storageError: null });
   },
   completeSetup: ({ displayName, pin, decoyPin, contacts, consent }) => {
     const now = Date.now();
@@ -67,13 +72,15 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
         id: uid("c"),
         name: c.name.trim(),
         relationship: c.relationship.trim() || "Trusted",
-        keyFingerprint: `SEN-${shortHash(c.name + now).slice(0, 4)}-${shortHash(c.relationship + c.name).slice(0, 4)}`.toUpperCase(),
-        authorised: true
+        keyFingerprint: null,
+        authorised: true,
+        relayUrl: c.relayUrl?.trim() || undefined,
+        relayToken: c.relayToken?.trim() || undefined
       })),
       nodes: [], cases: [], evidence: [], events: [], buffer: [],
       custody: [custodyLine("Protocol armed", "user", "Consent recorded. Silent tracking remains off.")],
       log: [logLine("protocol", "Protocol armed. No wearable or participating infrastructure is connected yet.")],
-      network: { cellular: "up", ble: false, mesh: false }, outbox: []
+      network: { cellular: "up", ble: false, mesh: false }, outbox: [], identity: createDeviceIdentity()
     };
     const created = createVault(pin, decoyPin, payload);
     sessionKey = created.key;
@@ -142,6 +149,32 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
     const next = advanceDelivery(envelope, channel);
     set(s => ({ outbox: s.outbox.map(e => e.id === id ? next : e), events: next.eventId ? s.events.map(e => e.id === next.eventId ? { ...e, status: "handed-off" } : e) : s.events, custody: [custodyLine("Safety handoff recorded", "user", `${channel} · ${next.id}`), ...s.custody], log: [logLine("sentinel", `Safety envelope handed to ${channel}. Recipient acknowledgement remains unverified.`), ...s.log].slice(0,40) }));
     return next.body;
+  },
+  relayEnvelopeToContact: async (id, contactId) => {
+    const state = get();
+    const envelope = state.outbox.find(e => e.id === id);
+    const contact = state.contacts.find(c => c.id === contactId && c.authorised);
+    if (!envelope || !contact || !state.identity) return "unconfigured";
+    if (!contact.relayUrl || !contact.relayToken) return "unconfigured";
+    const result = await relayEnvelope(envelope, state.identity, contact);
+    if (!result.ok || !result.acknowledgement) {
+      set(s => ({
+        outbox: s.outbox.map(e => e.id === id ? { ...e, attempts: [...e.attempts, { id: uid("del"), at: Date.now(), state: "failed", channel: "relay", detail: result.error || "Relay delivery failed." }] } : e),
+        custody: [custodyLine("Relay delivery failed", "device", result.error || "Unknown relay error"), ...s.custody],
+        log: [logLine("protocol", `Relay failed for ${envelope.id}: ${result.error || "unknown"}`), ...s.log].slice(0, 40),
+        storageError: result.error || null,
+      }));
+      return "failed";
+    }
+    const acknowledged = acknowledgeDelivery(envelope, result.acknowledgement.id);
+    set(s => ({
+      outbox: s.outbox.map(e => e.id === id ? acknowledged : e),
+      events: acknowledged.eventId ? s.events.map(e => e.id === acknowledged.eventId ? { ...e, status: "acknowledged" } : e) : s.events,
+      custody: [custodyLine("Relay receipt acknowledged", "device", `${contact.name} · ${result.acknowledgement?.id}`), ...s.custody],
+      log: [logLine("protocol", `Relay receipt acknowledged for ${envelope.id}. Downstream contact response remains unverified.`), ...s.log].slice(0, 40),
+      storageError: null,
+    }));
+    return "acknowledged";
   },
   addEvidenceFile: async (file, caseId) => {
     if (!sessionKey) return "";
@@ -225,7 +258,7 @@ const saveIfUnlocked = (state: ProtocolState) => {
   try {
     persistVault(record, sessionKey, {
       profile: state.profile, contacts: state.contacts, nodes: state.nodes, cases: state.cases,
-      evidence: state.evidence, events: state.events, buffer: state.buffer, custody: state.custody, log: state.log, network: state.network, outbox: state.outbox
+      evidence: state.evidence, events: state.events, buffer: state.buffer, custody: state.custody, log: state.log, network: state.network, outbox: state.outbox, identity: state.identity
     });
   } catch {
     useProtocol.setState({ storageError: "The local vault could not be written. Check available device storage before continuing." });

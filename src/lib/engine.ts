@@ -8,7 +8,7 @@ export interface DeliveryAttempt {
   id: string;
   at: number;
   state: DeliveryState;
-  channel: "system-share" | "copy" | "local";
+  channel: "system-share" | "copy" | "local" | "relay";
   detail: string;
 }
 
@@ -88,4 +88,18 @@ export function advanceDelivery(envelope: ProtocolEnvelope, channel: "system-sha
 
 export function triggerLabel(trigger: TriggerKind): string {
   return trigger.replaceAll("-", " ");
+}
+
+export function acknowledgeDelivery(envelope: ProtocolEnvelope, acknowledgementId: string): ProtocolEnvelope {
+  const at = Date.now();
+  return {
+    ...envelope,
+    attempts: [...envelope.attempts, {
+      id: acknowledgementId,
+      at,
+      state: "acknowledged",
+      channel: "relay",
+      detail: "Remote relay receipt verified. This is receipt acknowledgement, not proof of downstream contact response.",
+    }],
+  };
 }
