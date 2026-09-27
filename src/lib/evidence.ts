@@ -1,6 +1,6 @@
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { randomBytes } from "@noble/ciphers/webcrypto.js";
+import { randomBytes } from "@noble/hashes/utils.js";
 import { shortHash, uid } from "@/lib/format";
 
 const DB_NAME = "mbokoto-evidence-v2";
@@ -22,6 +22,18 @@ function hex(bytes: Uint8Array): string {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
+export function sealEvidence(bytes: Uint8Array, key: Uint8Array): { nonce: Uint8Array; ciphertext: Uint8Array; hash: string } {
+  if (key.length !== 32) throw new Error("Evidence encryption key must be 32 bytes.");
+  const nonce = randomBytes(24);
+  const ciphertext = xchacha20poly1305(key, nonce).encrypt(bytes);
+  return { nonce, ciphertext, hash: shortHash(hex(sha256(bytes))) };
+}
+
+export function openEvidence(record: Pick<EvidenceBlobRecord, "nonce" | "ciphertext">, key: Uint8Array): Uint8Array {
+  if (key.length !== 32) throw new Error("Evidence encryption key must be 32 bytes.");
+  return xchacha20poly1305(key, record.nonce).decrypt(record.ciphertext);
+}
+
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
@@ -37,11 +49,8 @@ export async function putEvidenceBlob(input: {
   originalName?: string;
   key: Uint8Array;
 }): Promise<EvidenceBlobRecord> {
-  if (input.key.length !== 32) throw new Error("Evidence encryption key must be 32 bytes.");
   const bytes = new Uint8Array(await input.file.arrayBuffer());
-  const nonce = randomBytes(24);
-  const ciphertext = xchacha20poly1305(input.key, nonce).encrypt(bytes);
-  const hash = hex(sha256(bytes));
+  const sealed = sealEvidence(bytes, input.key);
   const record: EvidenceBlobRecord = {
     id: uid("blob"),
     caseId: input.caseId ?? null,
@@ -49,9 +58,7 @@ export async function putEvidenceBlob(input: {
     mediaType: input.file.type || "application/octet-stream",
     size: input.file.size,
     originalName: input.originalName || "evidence",
-    hash: shortHash(hash),
-    nonce,
-    ciphertext,
+    ...sealed,
   };
   const database = await db();
   await new Promise<void>((resolve, reject) => {
@@ -65,7 +72,6 @@ export async function putEvidenceBlob(input: {
 }
 
 export async function getEvidenceBlob(id: string, key: Uint8Array): Promise<{ record: EvidenceBlobRecord; bytes: Uint8Array } | null> {
-  if (key.length !== 32) throw new Error("Evidence encryption key must be 32 bytes.");
   const database = await db();
   const value = await new Promise<EvidenceBlobRecord | undefined>((resolve, reject) => {
     const tx = database.transaction(STORE, "readonly");
@@ -75,8 +81,7 @@ export async function getEvidenceBlob(id: string, key: Uint8Array): Promise<{ re
   });
   database.close();
   if (!value) return null;
-  const bytes = xchacha20poly1305(key, value.nonce).decrypt(value.ciphertext);
-  return { record: value, bytes };
+  return { record: value, bytes: openEvidence(value, key) };
 }
 
 export async function deleteEvidenceBlob(id: string): Promise<void> {
