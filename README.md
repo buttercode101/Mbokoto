@@ -50,4 +50,4 @@ The repository build path is independently maintained from the original preview 
 
 Mbokoto is currently a local-first browser application. The repository contains Vercel deployment configuration, but no public deployment is currently exposed from this repository. A deployment must be verified against the current main commit before this project is represented as publicly released.
 
-The browser stores protocol state locally. Local storage is not a hardware-backed vault; an attacker with browser-profile or JavaScript execution access can bypass application-level controls. The application therefore does not claim device-compromise resistance.
+Protocol state is encrypted before persistence using a PIN-derived XChaCha20-Poly1305 vault. Local storage is still not a hardware-backed vault: an attacker with active JavaScript execution or control of the browser/device can bypass application-level controls. The four-digit PIN is therefore application-level protection, not device-compromise resistance.
