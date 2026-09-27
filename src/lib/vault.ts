@@ -46,6 +46,8 @@ export interface VaultPayload {
   log: ProtocolLog[];
   network: NetworkState;
 }
+  outbox: ProtocolEnvelope[];
+}
 
 export interface VaultRecord {
   version: number;
