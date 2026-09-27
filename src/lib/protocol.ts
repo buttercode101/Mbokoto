@@ -14,7 +14,7 @@ export type MediaKind = "note" | "photo-hash" | "audio-buffer" | "location" | "c
 
 export interface Consent { timelineShare: boolean; nodeParticipation: boolean; acceptedAt: number | null; }
 export interface Profile { displayName: string; setupComplete: boolean; armed: boolean; consent: Consent; demo: boolean; }
-export interface TrustedContact { id: string; name: string; relationship: string; keyFingerprint: string; authorised: boolean; publicKey?: string; relayUrl?: string; relayToken?: string; }
+export interface TrustedContact { id: string; name: string; relationship: string; keyFingerprint: string | null; authorised: boolean; publicKey?: string; relayUrl?: string; relayToken?: string; }
 export interface MeshHop { nodeId: string; label: string; kind: "place" | "contact" | "phone"; at: number; delivered: boolean; }
 export interface SafetyEvent { id: string; triggeredAt: number; surface: Surface; trigger: TriggerKind; network: EventNetwork; meshHops: MeshHop[]; status: DeliveryState | "closed"; lockScreenLeak: false; }
 export interface LastKnownEvent { id: string; at: number; kind: "check-in" | "place" | "transit" | "phone" | "node-sighting" | "trigger" | "missed"; title: string; detail: string; source: "user" | "node" | "mesh" | "device" | "trusted-contact"; verified: boolean; }
