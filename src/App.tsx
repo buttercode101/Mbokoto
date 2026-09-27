@@ -12,8 +12,14 @@ const surfaces:{id:Page;title:string;eyebrow:string;copy:string}[]=[
 export default function App(){
  const [page,setPage]=useState<Page>("home");
  const profile=useProtocol(s=>s.profile);
+ const session=useProtocol(s=>s.session);
+ const hydrated=useProtocol(s=>s.hasHydrated);
  const loadDemo=useProtocol(s=>s.loadDemo);
  const resetAll=useProtocol(s=>s.resetAll);
+ const lock=useProtocol(s=>s.lock);
+ if(!hydrated)return <main className="splash"><div><div className="eyebrow">MBOKOTO / SENTINEL</div><h1>Loading local protocol…</h1><p className="muted">Nothing is being transmitted.</p></div></main>;
+ if(session==="locked")return <LockScreen/>;
+ if(session==="decoy")return <DecoyScreen/>;
  if(page==="setup")return <Setup onDone={()=>setPage("home")} onBack={()=>setPage("home")}/>;
  return <div className="shell">
   <header><button className="brand" onClick={()=>setPage("home")}>MBOKOTO <span>/ SENTINEL</span></button>
@@ -24,9 +30,23 @@ export default function App(){
   {page==="sentinel"&&<Sentinel/>}
   {page==="trace"&&<Trace/>}
   {page==="blackbox"&&<Blackbox/>}
-  <footer><span>Local-first · no silent tracking</span><span>{profile.demo?"DEMONSTRATION MODE":"REAL DEVICE MODE"}</span>{profile.setupComplete&&<button onClick={()=>{resetAll();setPage("home")}}>Reset local data</button>}</footer>
+  <footer><span>Local-first · no silent tracking</span><span>{profile.demo?"DEMONSTRATION MODE":"REAL DEVICE MODE"}</span>{profile.setupComplete&&<button onClick={lock}>Lock</button>}{profile.setupComplete&&<button onClick={()=>{if(window.confirm("Erase all local protocol data? This cannot be undone.")){resetAll();setPage("home")}}}>Reset local data</button>}</footer>
  </div>
 }
+
+function LockScreen(){
+ const unlock=useProtocol(s=>s.unlock);
+ const error=useProtocol(s=>s.pinError);
+ const [pin,setPin]=useState("");
+ const submit=()=>{if(!/^[0-9]{4}$/.test(pin))return;const result=unlock(pin);if(result!=="bad")setPin("");};
+ return <main className="splash"><div className="lock-card"><div className="eyebrow">PRIVATE DEVICE</div><h1>Welcome back.</h1><p className="copy">Enter your four-digit device PIN. No data leaves this device.</p><form onSubmit={e=>{e.preventDefault();submit()}}><label className="sr-only" htmlFor="device-pin">Device PIN</label><input id="device-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={4} pattern="[0-9]{4}" value={pin} onChange={e=>setPin(e.target.value.replace(/\\D/g,""))} autoFocus/><button className="primary" type="submit">Unlock</button></form>{error&&<p className="danger-text" role="alert">{error}</p>}</div></main>
+}
+
+function DecoyScreen(){
+ const exit=useProtocol(s=>s.exitDecoy);
+ return <main className="splash"><div className="lock-card"><div className="eyebrow">DEVICE</div><h1>No saved items.</h1><p className="copy">This device has no local items available in this view.</p><button onClick={exit}>Close</button></div></main>
+}
+
 
 function Landing({onDemo,onSetup}:{onDemo:()=>void;onSetup:()=>void}){return <main className="hero">
  <div className="eyebrow">SAFETY-EVENT PROTOCOL</div><h1>SENTINEL</h1><p className="lead">The trail, held in trust.</p>
