@@ -1,6 +1,7 @@
 import { fingerprint, shortHash, uid } from "@/lib/format";
 
 export type Surface = "sentinel" | "trace" | "blackbox";
+export type DeliveryState = "local" | "queued" | "handed-off" | "acknowledged" | "failed";
 export type NetworkLevel = "up" | "degraded" | "down";
 export type EventNetwork = "cellular" | "degraded" | "offline";
 export type TriggerKind = "wearable-triple-tap" | "wearable-hold" | "volume-pattern" | "missed-checkin" | "manual";
@@ -14,7 +15,7 @@ export interface Consent { timelineShare: boolean; nodeParticipation: boolean; a
 export interface Profile { displayName: string; setupComplete: boolean; armed: boolean; consent: Consent; demo: boolean; }
 export interface TrustedContact { id: string; name: string; relationship: string; keyFingerprint: string; authorised: boolean; }
 export interface MeshHop { nodeId: string; label: string; kind: "place" | "contact" | "phone"; at: number; delivered: boolean; }
-export interface SafetyEvent { id: string; triggeredAt: number; surface: Surface; trigger: TriggerKind; network: EventNetwork; meshHops: MeshHop[]; status: "queued" | "relayed" | "acknowledged" | "closed"; lockScreenLeak: false; }
+export interface SafetyEvent { id: string; triggeredAt: number; surface: Surface; trigger: TriggerKind; network: EventNetwork; meshHops: MeshHop[]; status: DeliveryState | "closed"; lockScreenLeak: false; }
 export interface LastKnownEvent { id: string; at: number; kind: "check-in" | "place" | "transit" | "phone" | "node-sighting" | "trigger" | "missed"; title: string; detail: string; source: "user" | "node" | "mesh" | "device" | "trusted-contact"; verified: boolean; }
 export interface ParticipatingNode { id: string; name: string; kind: NodeKind; area: string; status: NodeStatus; requestedAt?: number; retainsUntil?: number; note: string; }
 export interface EvidenceItem { id: string; caseId: string; kind: EvidenceKind; media: MediaKind; title: string; body: string; capturedAt: number; hash: string; sourceOfTruth: boolean; }
