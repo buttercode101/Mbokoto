@@ -1,6 +1,4 @@
 import { fingerprint, shortHash, uid } from "@/lib/format";
-import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
-import { sha256 } from "@noble/hashes/sha2.js";
 
 export type Surface = "sentinel" | "trace" | "blackbox";
 export type NetworkLevel = "up" | "degraded" | "down";
@@ -13,7 +11,7 @@ export type EvidenceKind = "original" | "derivative";
 export type MediaKind = "note" | "photo-hash" | "audio-buffer" | "location" | "cctv-hold" | "summary" | "sensor";
 
 export interface Consent { timelineShare: boolean; nodeParticipation: boolean; acceptedAt: number | null; }
-export interface Profile { displayName: string; pinHash: string; decoyPinHash: string; pinSalt: string; setupComplete: boolean; armed: boolean; consent: Consent; demo: boolean; }
+export interface Profile { displayName: string; setupComplete: boolean; armed: boolean; consent: Consent; demo: boolean; }
 export interface TrustedContact { id: string; name: string; relationship: string; keyFingerprint: string; authorised: boolean; }
 export interface MeshHop { nodeId: string; label: string; kind: "place" | "contact" | "phone"; at: number; delivered: boolean; }
 export interface SafetyEvent { id: string; triggeredAt: number; surface: Surface; trigger: TriggerKind; network: EventNetwork; meshHops: MeshHop[]; status: "queued" | "relayed" | "acknowledged" | "closed"; lockScreenLeak: false; }
@@ -31,7 +29,6 @@ export const PIN_DECOY_DEMO = "2580";
 export const BUFFER_HOURS = 24;
 export const RETENTION_HOURS = 72;
 
-export function hashPin(pin: string, salt: string) { return Array.from(pbkdf2(sha256, pin, salt, { c: 600_000, dkLen: 32 }), b => b.toString(16).padStart(2, "0")).join(""); }
 export function nodeLabel(kind: NodeKind) {
   switch (kind) {
     case "mall": return "Shopping centre";
@@ -43,7 +40,7 @@ export function nodeLabel(kind: NodeKind) {
   }
 }
 export function emptyProfile(): Profile {
-  return { displayName:"", pinHash:"", decoyPinHash:"", pinSalt:"", setupComplete:false, armed:false,
+  return { displayName:"", setupComplete:false, armed:false,
     consent:{timelineShare:false,nodeParticipation:false,acceptedAt:null}, demo:false };
 }
 export function demoNodes(_now: number): ParticipatingNode[] {
@@ -104,6 +101,6 @@ export function buildDemo(now=Date.now()) {
     {id:uid("log"),at:ago(118),surface:"trace",text:"Case SEN-2026-014 opened — Lerato has not arrived."},
     {id:uid("log"),at:ago(124),surface:"protocol",text:"Check-in window closed. Early reporting path is open."}
   ];
-  const demoSalt="mbokoto-demo-salt-v1"; const profile:Profile={displayName:"Lerato Maseko",pinHash:hashPin(PIN_DEMO,demoSalt),decoyPinHash:hashPin(PIN_DECOY_DEMO,demoSalt),pinSalt:demoSalt,setupComplete:true,armed:true,consent:{timelineShare:true,nodeParticipation:true,acceptedAt:ago(800)},demo:true};
+  const profile:Profile={displayName:"Lerato Maseko",setupComplete:true,armed:true,consent:{timelineShare:true,nodeParticipation:true,acceptedAt:ago(800)},demo:true};
   return {profile,contacts,nodes,cases:[traceCase] as TraceCase[],evidence:[evidence] as EvidenceItem[],events:[] as SafetyEvent[],buffer,custody,log};
 }
