@@ -1,4 +1,4 @@
-import { fingerprint, shortHash, uid, randomSalt } from "@/lib/format";
+import { fingerprint, shortHash, uid } from "@/lib/format";
 import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
