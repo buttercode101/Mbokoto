@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createSentinelEnvelope, advanceDelivery } from "@/lib/engine";
-import { putEvidenceBlob } from "@/lib/evidence";
+import { putEvidenceBlob, wipeEvidenceBlobs } from "@/lib/evidence";
 import { uid, shortHash } from "@/lib/format";
 import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TriggerKind, type LastKnownEvent, buildDemo, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
 import { createVault, persistVault, readVault, unlockVault, wipeVault, type VaultPayload } from "@/lib/vault";
