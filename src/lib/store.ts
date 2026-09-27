@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import { createSentinelEnvelope, advanceDelivery, type ProtocolEnvelope } from "@/lib/engine";
+import { createSentinelEnvelope, advanceDelivery } from "@/lib/engine";
 import { uid, shortHash } from "@/lib/format";
-import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TrustedContact, type ParticipatingNode, type TriggerKind, type LastKnownEvent, buildDemo, buildHops, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
+import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TrustedContact, type ParticipatingNode, type TriggerKind, type LastKnownEvent, buildDemo, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
 import { createVault, persistVault, readVault, unlockVault, wipeVault, type VaultPayload } from "@/lib/vault";
 
 export type SessionMode = "unlocked" | "locked" | "decoy";
@@ -117,7 +117,7 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
   triggerSentinel: (trigger) => {
     const s = get();
     if (!s.profile.armed) return "";
-    const at = Date.now(), id = uid("ev"), hops = buildHops(s.nodes, s.contacts, at), network = eventNetworkFrom(s.network.cellular);
+    const at = Date.now(), id = uid("ev"), network = eventNetworkFrom(s.network.cellular);
     const event: SafetyEvent = { id, triggeredAt: at, surface: "sentinel", trigger, network, meshHops: [{nodeId:"phone",label:"This phone (locked)",kind:"phone",at,delivered:true}], status: network === "offline" ? "queued" : "local", lockScreenLeak: false };
     const lk: LastKnownEvent = { id: uid("lk"), at, kind: "trigger", title: "Discrete trigger", detail: `Sentinel ${trigger.replace(/-/g, " ")}. Phone locked. Lock screen stayed dark. Network: ${network}.`, source: "device", verified: true };
     const buf = { id: uid("buf"), at, kind: "sensor" as const, title: "Sentinel trigger", body: `${trigger} · ${network} · BLE ${s.network.ble ? "up" : "down"}`, hash: shortHash(`sentinel:${id}:${at}`), expiresAt: at + BUFFER_HOURS * 3600_000, sourceOfTruth: true };
