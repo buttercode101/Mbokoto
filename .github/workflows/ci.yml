@@ -23,6 +23,6 @@ jobs:
       - uses: actions/setup-node@v7.0.0 # immutable GitHub release
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm install --no-audit --no-fund --legacy-peer-deps
       - run: npm test
       - run: npm audit --audit-level=high --omit=dev
