@@ -25,14 +25,17 @@ export default function App(){
  if(session==="decoy")return <DecoyScreen/>;
  if(page==="setup")return <Setup onDone={()=>setPage("home")} onBack={()=>setPage("home")}/>;
  return <div className="shell">
+  <a className="skip-link" href="#main-content">Skip to main content</a>
   <header><button className="brand" onClick={()=>setPage("home")}>MBOKOTO <span>/ SENTINEL</span></button>
    <nav>{profile.setupComplete&&surfaces.map(s=><button key={s.id} className={page===s.id?"active":""} onClick={()=>setPage(s.id)}>{s.title}</button>)}</nav>
   </header>
+  <div id="main-content" tabIndex={-1}>
   {page==="home"&&!profile.setupComplete&&<Landing onDemo={()=>{loadDemo();setPage("home")}} onSetup={()=>setPage("setup")}/>}
   {page==="home"&&profile.setupComplete&&<Hub setPage={setPage}/>}
   {page==="sentinel"&&<Sentinel/>}
   {page==="trace"&&<Trace/>}
   {page==="blackbox"&&<Blackbox/>}
+  </div>
   <>{storageError&&<div className="storage-error" role="alert">{storageError}</div>}<footer><span>Local-first · no silent background tracking</span><span>{profile.demo?"DEMONSTRATION MODE":"REAL DEVICE MODE"}</span>{profile.setupComplete&&<button onClick={lock}>Lock</button>}{profile.setupComplete&&<button onClick={()=>{if(window.confirm("Erase all local protocol data? This cannot be undone.")){resetAll();setPage("home")}}}>Reset local data</button>}</footer></>
  </div>
 }
