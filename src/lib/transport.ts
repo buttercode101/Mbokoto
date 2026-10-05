@@ -21,8 +21,9 @@ export interface RelayAcknowledgement {
   receivedAt: number;
   envelopeId: string;
   senderFingerprint: string;
-  state: "acknowledged";
+  state: "relay-received";
   durability: "receipt-only";
+  downstreamDelivery: "not-attempted";
 }
 
 export interface RelayResult {
@@ -85,7 +86,11 @@ export async function relayEnvelope(envelope: ProtocolEnvelope, identity: Device
       body: JSON.stringify(message),
     });
     const data = await response.json().catch(() => null) as { ok?: boolean; acknowledgement?: RelayAcknowledgement; code?: string } | null;
-    if (!response.ok || !data?.ok || !data.acknowledgement || data.acknowledgement.envelopeId !== envelope.id) {
+    if (!response.ok || !data?.ok || !data.acknowledgement ||
+        data.acknowledgement.envelopeId !== envelope.id ||
+        data.acknowledgement.state !== "relay-received" ||
+        data.acknowledgement.durability !== "receipt-only" ||
+        data.acknowledgement.downstreamDelivery !== "not-attempted") {
       return { ok: false, error: data?.code || `Relay returned HTTP ${response.status}.` };
     }
     return { ok: true, acknowledgement: data.acknowledgement };
