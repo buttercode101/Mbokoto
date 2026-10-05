@@ -32,7 +32,7 @@ export default function App(){
   {page==="sentinel"&&<Sentinel/>}
   {page==="trace"&&<Trace/>}
   {page==="blackbox"&&<Blackbox/>}
-  <>{storageError&&<div className="storage-error" role="alert">{storageError}</div>}<footer><span>Local-first · no silent tracking</span><span>{profile.demo?"DEMONSTRATION MODE":"REAL DEVICE MODE"}</span>{profile.setupComplete&&<button onClick={lock}>Lock</button>}{profile.setupComplete&&<button onClick={()=>{if(window.confirm("Erase all local protocol data? This cannot be undone.")){resetAll();setPage("home")}}}>Reset local data</button>}</footer></>
+  <>{storageError&&<div className="storage-error" role="alert">{storageError}</div>}<footer><span>Local-first · no silent background tracking</span><span>{profile.demo?"DEMONSTRATION MODE":"REAL DEVICE MODE"}</span>{profile.setupComplete&&<button onClick={lock}>Lock</button>}{profile.setupComplete&&<button onClick={()=>{if(window.confirm("Erase all local protocol data? This cannot be undone.")){resetAll();setPage("home")}}}>Reset local data</button>}</footer></>
  </div>
 }
 
