@@ -62,3 +62,17 @@ describe("consent boundary source regression", () => {
     expect(source).toContain("!timelineShare||!nodeParticipation");
   });
 });
+
+
+describe("accessibility boundary source regression", () => {
+  it("keeps crisis navigation and status announcements accessible", async () => {
+    const fs = await import("node:fs/promises");
+    const app = await fs.readFile(new URL("../App.tsx", import.meta.url), "utf8");
+    const css = await fs.readFile(new URL("../styles.css", import.meta.url), "utf8");
+    expect(app).toContain('className="skip-link"');
+    expect(app).toContain('id="main-content"');
+    expect(app).toContain('role="status"');
+    expect(css).toContain(":focus-visible");
+    expect(css).toContain("prefers-reduced-motion");
+  });
+});
