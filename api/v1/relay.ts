@@ -146,8 +146,9 @@ export async function POST(request: Request) {
       receivedAt: now,
       envelopeId: message.envelopeId,
       senderFingerprint: fingerprint(message.senderPublicKey),
-      state: "acknowledged",
+      state: "relay-received",
       durability: "receipt-only",
+      downstreamDelivery: "not-attempted",
     },
   });
 }
