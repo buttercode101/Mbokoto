@@ -39,8 +39,9 @@ function LockScreen(){
  const unlock=useProtocol(s=>s.unlock);
  const error=useProtocol(s=>s.pinError);
  const [pin,setPin]=useState("");
+ const demoVault=typeof window!=="undefined"&&window.localStorage.getItem("sentinel-demo-v1")==="1";
  const submit=()=>{if(!/^[0-9]{4}$/.test(pin))return;const result=unlock(pin);if(result!=="bad")setPin("");};
- return <main className="splash"><div className="lock-card"><div className="eyebrow">PRIVATE DEVICE</div><h1>Welcome back.</h1><p className="copy">Enter your four-digit device PIN. No data leaves this device.</p><form onSubmit={e=>{e.preventDefault();submit()}}><label className="sr-only" htmlFor="device-pin">Device PIN</label><input id="device-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={4} pattern="[0-9]{4}" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,""))} autoFocus/><button className="primary" type="submit">Unlock</button></form>{error&&<p className="danger-text" role="alert">{error}</p>}</div></main>
+ return <main className="splash"><div className="lock-card"><div className="eyebrow">PRIVATE DEVICE</div><h1>Welcome back.</h1><p className="copy">Enter your four-digit device PIN. No data leaves this device.</p>{demoVault&&<p className="muted">Demonstration vault: PIN {PIN_DEMO} · safe-mode {PIN_DECOY_DEMO}. These values never apply to a real-device vault.</p>}<form onSubmit={e=>{e.preventDefault();submit()}}><label className="sr-only" htmlFor="device-pin">Device PIN</label><input id="device-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={4} pattern="[0-9]{4}" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,""))} autoFocus/><button className="primary" type="submit">Unlock</button></form>{error&&<p className="danger-text" role="alert">{error}</p>}</div></main>
 }
 
 function DecoyScreen(){
