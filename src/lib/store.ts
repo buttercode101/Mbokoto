@@ -61,7 +61,7 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
     const demoPayload = { ...d, identity };
     const created = createVault("1408", "2580", demoPayload);
     sessionKey = created.key;
-    try { window.localStorage.setItem("sentinel-v2", JSON.stringify(created.record)); }
+    try { window.localStorage.setItem("sentinel-v2", JSON.stringify(created.record)); window.localStorage.setItem("sentinel-demo-v1","1"); }
     catch { set({ storageError: "Local storage is unavailable. The demonstration cannot be persisted." }); }
     set({ ...demoPayload, session: "unlocked", pinError: null, storageError: null });
   },
@@ -86,7 +86,7 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
     };
     const created = createVault(pin, decoyPin, payload);
     sessionKey = created.key;
-    try { window.localStorage.setItem("sentinel-v2", JSON.stringify(created.record)); }
+    try { window.localStorage.setItem("sentinel-v2", JSON.stringify(created.record)); window.localStorage.removeItem("sentinel-demo-v1"); }
     catch { set({ storageError: "Local storage is unavailable. Setup was not persisted." }); }
     set({ ...payload, session: "unlocked", pinError: null, storageError: null });
   },
@@ -257,12 +257,14 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
   emergencyWipe: () => {
     sessionKey = null;
     wipeVault();
+    window.localStorage.removeItem("sentinel-demo-v1");
     void wipeEvidenceBlobs();
     set({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
   },
   resetAll: () => {
     sessionKey = null;
     wipeVault();
+    window.localStorage.removeItem("sentinel-demo-v1");
     set({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
   }
 }));
