@@ -49,8 +49,9 @@ describe("relay endpoint", () => {
     const body = await response.json();
     expect(body.ok).toBe(true);
     expect(body.acknowledgement.envelopeId).toBe(payload.envelopeId);
-    expect(body.acknowledgement.state).toBe("acknowledged");
+    expect(body.acknowledgement.state).toBe("relay-received");
     expect(body.acknowledgement.durability).toBe("receipt-only");
+    expect(body.acknowledgement.downstreamDelivery).toBe("not-attempted");
   });
   it("rejects the same signed nonce twice", async () => {
     process.env.MBOKOTO_RELAY_TOKEN = "test-token-1234567890-abcdefghijklmnopqrstuvwxyz";
