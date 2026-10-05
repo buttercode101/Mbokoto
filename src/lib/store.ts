@@ -304,13 +304,7 @@ export function hydrateVault() {
 if (typeof window !== "undefined") {
   hydrateVault();
   window.addEventListener("storage", event => {
-    if (event.key !== "sentinel-v2") {
-      if (event.key === "sentinel-v2" && event.newValue === null) {
-        sessionKey = null;
-        useProtocol.setState({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
-      }
-      return;
-    }
+    if (event.key !== "sentinel-v2") return;
     if (!event.newValue) {
       sessionKey = null;
       useProtocol.setState({ ...emptyPayload(), session: "unlocked", pinError: null, storageError: null });
