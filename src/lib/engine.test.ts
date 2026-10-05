@@ -51,3 +51,13 @@ describe("protocol delivery boundary", () => {
     expect(envelope.body).toContain("does NOT claim the place received");
   });
 });
+
+
+describe("consent boundary source regression", () => {
+  it("does not allow setup to hard-code consent true", async () => {
+    const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("../App.tsx", import.meta.url), "utf8"));
+    expect(source).toContain("consent:{timelineShare,nodeParticipation}");
+    expect(source).not.toContain("consent:{timelineShare:true,nodeParticipation:true}");
+    expect(source).toContain("!timelineShare||!nodeParticipation");
+  });
+});
