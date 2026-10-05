@@ -10,7 +10,8 @@ const surfaces:{id:Page;title:string;eyebrow:string;copy:string}[]=[
  {id:"blackbox",title:"Blackbox",eyebrow:"PRESERVE",copy:"Local incident memory, evidence hashes and controlled deletion."}
 ];
 
-export default function App(){
+export default /* release parity: verified 2026-10-05 */
+function App(){
  const [page,setPage]=useState<Page>("home");
  const profile=useProtocol(s=>s.profile);
  const session=useProtocol(s=>s.session);
