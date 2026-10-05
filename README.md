@@ -58,7 +58,7 @@ The repository build path is independently maintained from the original preview 
 
 ## Release boundary
 
-Mbokoto is currently a local-first browser application. The repository contains Vercel deployment configuration, but no public deployment is currently exposed from this repository. A deployment must be verified against the current main commit before this project is represented as publicly released.
+Mbokoto is currently a local-first browser application. A public Vercel deployment exists, but it should be presented as a limited beta while relay delivery remains intentionally unconfigured. The browser can create local/shareable safety artifacts; it must not be represented as having contacted SAPS, a trusted contact, a business or a camera unless an external acknowledgement actually exists.
 
 Protocol state is encrypted before persistence using a PIN-derived XChaCha20-Poly1305 vault. Local storage is still not a hardware-backed vault: an attacker with active JavaScript execution or control of the browser/device can bypass application-level controls. The four-digit PIN is therefore application-level protection, not device-compromise resistance.
 
