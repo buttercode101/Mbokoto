@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { createSentinelEnvelope, createTraceEnvelope, createBlackboxExportEnvelope, advanceDelivery, acknowledgeDelivery } from "@/lib/engine";
+import { createSentinelEnvelope, createTraceEnvelope, createBlackboxExportEnvelope, createStationPackEnvelope, createPlaceHoldEnvelope, advanceDelivery, acknowledgeDelivery } from "@/lib/engine";
 import { putEvidenceBlob, wipeEvidenceBlobs } from "@/lib/evidence";
 import { uid, shortHash } from "@/lib/format";
 import { BUFFER_HOURS, RETENTION_HOURS, type Consent, type CustodyEntry, type EvidenceItem, type NetworkState, type Profile, type ProtocolLog, type SafetyEvent, type TraceCase, type TriggerKind, type LastKnownEvent, buildDemo, emptyProfile, eventNetworkFrom, nextCaseRef } from "@/lib/protocol";
@@ -30,6 +30,8 @@ interface ProtocolState extends VaultPayload {
   createBlackboxExport: () => string;
   openCase: (i: { subject: string; relation: "self" | "trusted"; openedBy: string }) => string;
   requestPreservation: (c: string, n: string) => void;
+  createStationPack: (c: string) => string;
+  createPlaceHold: (c: string, place: string) => string;
   resolveCase: (c: string) => void;
   addCheckIn: (p: string) => void;
   addNote: (t: string, b: string) => void;
@@ -213,6 +215,20 @@ export const useProtocol = create<ProtocolState>()((set, get) => ({
       custody: [custodyLine("Preservation requested", "user", `${node.name} · awaiting acknowledgement`), ...s.custody],
       log: [logLine("trace", `Preservation request created for ${node.name}. No node acknowledgement claimed.`), ...s.log].slice(0, 40)
     }));
+  },
+  createStationPack: (caseId) => {
+    const s=get(), target=s.cases.find(c=>c.id===caseId);
+    if(!target) return "";
+    const envelope=createStationPackEnvelope({caseId:target.id,ref:target.ref,subject:target.subject,openedAt:target.openedAt,lastKnown:target.lastKnown,evidenceCount:target.evidenceIds.length});
+    set(state=>({outbox:[envelope,...state.outbox],custody:[custodyLine("Station pack created","user",`${target.ref} · local artifact only`),...state.custody],log:[logLine("trace",`Station pack created for ${target.ref}. No police submission claimed.`),...state.log].slice(0,40)}));
+    return envelope.id;
+  },
+  createPlaceHold: (caseId, place) => {
+    const s=get(), target=s.cases.find(c=>c.id===caseId), clean=place.trim();
+    if(!target||!clean||target.status==="resolved") return "";
+    const envelope=createPlaceHoldEnvelope({caseId:target.id,ref:target.ref,subject:target.subject,place:clean});
+    set(state=>({outbox:[envelope,...state.outbox],custody:[custodyLine("Place hold request created","user",`${clean} · acknowledgement unverified`),...state.custody],log:[logLine("trace",`Place hold request created for ${clean}. Receipt and action remain unverified.`),...state.log].slice(0,40)}));
+    return envelope.id;
   },
   createBlackboxExport: () => {
     const state = get();
