@@ -7,3 +7,5 @@
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+.skip-link{position:fixed;left:12px;top:12px;z-index:1000;transform:translateY(-160%);background:var(--paper,#fff);color:var(--ink,#111);padding:10px 14px;border:2px solid currentColor;border-radius:8px}.skip-link:focus{transform:translateY(0)}
