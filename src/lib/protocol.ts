@@ -67,6 +67,7 @@ export function buildHops(nodes: ParticipatingNode[], contacts: TrustedContact[]
 export const RESOURCES = [
   {name:"SAPS",number:"10111",detail:"Police emergency"},
   {name:"Ambulance",number:"10177",detail:"Medical emergency"},
+  {name:"Cell emergency",number:"112",detail:"Emergency routing from a mobile phone"},
   {name:"GBV Command Centre",number:"0800 428 428",detail:"24-hour GBV support"},
   {name:"GBV Please Call Me",number:"*120*7867#",detail:"USSD, no airtime needed"},
   {name:"SADAG",number:"0800 567 567",detail:"Mental health, 24-hour"},
